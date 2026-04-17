@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{BufWriter, Write},
     path::Path,
 };
@@ -55,6 +55,56 @@ where
     let file = OpenOptions::new().create(true).append(true).open(path)?;
     let mut writer = BufWriter::new(file);
     write_jsonl_stream(&mut writer, values)?;
-    writer.flush()?;
+    let file = writer.into_inner().map_err(|err| err.into_error())?;
+    file.sync_all()?;
+    sync_parent_directory(path.parent())?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(parent: Option<&Path>) -> AppResult<()> {
+    if let Some(parent) = parent {
+        File::open(parent)?.sync_all()?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_: Option<&Path>) -> AppResult<()> {
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use serde::Serialize;
+
+    use super::append_jsonl_to_path;
+
+    #[derive(Serialize)]
+    struct Row {
+        value: i32,
+    }
+
+    #[test]
+    fn appends_jsonl_rows() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("jsonl-append-{nanos}.jsonl"));
+
+        append_jsonl_to_path(&path, &[Row { value: 1 }, Row { value: 2 }]).unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        assert_eq!(contents.lines().count(), 2);
+        assert!(contents.contains(r#""value":1"#));
+        assert!(contents.contains(r#""value":2"#));
+
+        let _ = fs::remove_file(path);
+    }
 }
