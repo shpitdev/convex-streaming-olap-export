@@ -16,6 +16,8 @@ pub enum AppError {
     InvalidDeployUrl(String),
     #[error("deploy key cannot be empty")]
     EmptyDeployKey,
+    #[error("invalid deploy key for authorization header: {0}")]
+    InvalidDeployKey(String),
     #[error("expected a JSON object document from Convex")]
     ExpectedJsonObject,
     #[error("missing required Convex metadata field `{0}`")]

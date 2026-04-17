@@ -21,7 +21,7 @@ impl ConvexClient {
         let mut headers = HeaderMap::new();
         let authorization = format!("Convex {}", config.deploy_key);
         let authorization = HeaderValue::from_str(&authorization)
-            .map_err(|err| AppError::TelemetryInit(err.to_string()))?;
+            .map_err(|err| AppError::InvalidDeployKey(err.to_string()))?;
         headers.insert(AUTHORIZATION, authorization);
 
         let http = Client::builder().default_headers(headers).build()?;
@@ -45,5 +45,28 @@ impl ConvexClient {
             .error_for_status()?;
 
         Ok(response.json::<T>().await?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use url::Url;
+
+    use crate::config::ConvexConnectionConfig;
+
+    use super::ConvexClient;
+
+    #[test]
+    fn rejects_deploy_keys_that_make_invalid_auth_headers() {
+        let config = ConvexConnectionConfig::new(
+            Url::parse("https://happy-otter-123.convex.cloud").unwrap(),
+            "prod:happy-otter-123|\nsecret".to_string(),
+        )
+        .unwrap();
+
+        let err = ConvexClient::new(config).err().unwrap();
+        assert!(err
+            .to_string()
+            .contains("invalid deploy key for authorization header"));
     }
 }
