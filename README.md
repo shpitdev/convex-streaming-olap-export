@@ -96,6 +96,28 @@ That is the part worth copying first. The Fivetran gRPC server is an integration
 - `arrow`
 - `parquet`
 
+## Local Env
+
+The CLI reads a local `.env` file automatically.
+
+Fill in:
+
+- `CONVEX_DEPLOYMENT_URL`
+- `CONVEX_DEPLOY_KEY`
+- optional `RUST_LOG`
+
+Then run commands like:
+
+- `cargo run --bin convex-export -- schemas`
+- `cargo run --bin convex-export -- snapshot --table-name users`
+- `cargo run --bin convex-export -- deltas --cursor 0`
+- `cargo run --bin convex-export -- sync-once`
+- `just verify`
+- `just sync-once`
+
+`sync-once` appends normalized events to `.memory/raw_change_log.jsonl` and
+stores checkpoint state in `.memory/raw_change_log.checkpoint.json` by default.
+
 ## References
 
 - [Convex streaming export docs](https://docs.convex.dev/production/integrations/streaming-import-export)

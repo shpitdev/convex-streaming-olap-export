@@ -22,3 +22,5 @@ target
 
 .AGENTS.md
 .memory/
+.env
+.env.local
