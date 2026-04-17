@@ -112,13 +112,18 @@ Then run commands like:
 - `cargo run --bin convex-export -- snapshot --table-name users`
 - `cargo run --bin convex-export -- deltas --cursor 0`
 - `cargo run --bin convex-export -- sync-once`
+- `cargo run --bin convex-export -- materialize-staging`
 - `just verify`
 - `just install-hooks`
 - `just sync-once`
+- `just materialize-staging`
 - `just depot-ci --job fmt`
 
-`sync-once` appends normalized events to `.memory/raw_change_log.jsonl` and
-stores checkpoint state in `.memory/raw_change_log.checkpoint.json` by default.
+`sync-once` writes deterministic Parquet batch files under `.memory/raw_change_log/`
+and stores checkpoint state in `.memory/raw_change_log.checkpoint.json` by default.
+
+`materialize-staging` rebuilds source-conformed current-state Parquet tables under
+`.memory/staging/` from the Parquet `raw_change_log` dataset.
 
 ## Quality Gates
 

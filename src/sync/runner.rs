@@ -9,7 +9,7 @@ use crate::{
         checkpoint::{Checkpoint, SyncState},
         schema::SchemaCatalog,
     },
-    sink::jsonl::append_jsonl_to_path,
+    sink::parquet::write_change_events_batch,
     state::checkpoint_store::CheckpointStore,
     sync::{
         delta_sync::{fetch_delta_events, DeltaSyncOptions},
@@ -133,22 +133,26 @@ impl ExportRunner {
             )
             .await?;
 
-            append_jsonl_to_path(&options.raw_change_log_path, &result.events)?;
-            *events_written += result.events.len();
-            *snapshot_pages_fetched += result.pages_fetched;
-
             if result.has_more {
                 let next_cursor = result.cursor.ok_or(AppError::MissingSnapshotCursor)?;
-                checkpoint_store.save(&Checkpoint::initial_snapshot(
-                    result.snapshot,
-                    next_cursor.clone(),
-                ))?;
+                let checkpoint = Checkpoint::initial_snapshot(result.snapshot, next_cursor.clone());
+                write_change_events_batch(
+                    &options.raw_change_log_path,
+                    &checkpoint,
+                    &result.events,
+                )?;
+                *events_written += result.events.len();
+                *snapshot_pages_fetched += result.pages_fetched;
+                checkpoint_store.save(&checkpoint)?;
                 snapshot = Some(result.snapshot);
                 cursor = Some(next_cursor);
                 continue;
             }
 
             let checkpoint = Checkpoint::delta_tail(result.snapshot);
+            write_change_events_batch(&options.raw_change_log_path, &checkpoint, &result.events)?;
+            *events_written += result.events.len();
+            *snapshot_pages_fetched += result.pages_fetched;
             checkpoint_store.save(&checkpoint)?;
             return Ok(result.snapshot);
         }
@@ -174,12 +178,11 @@ impl ExportRunner {
             )
             .await?;
 
-            append_jsonl_to_path(&options.raw_change_log_path, &result.events)?;
-            *events_written += result.events.len();
-            *delta_pages_fetched += result.pages_fetched;
-
             cursor = result.cursor;
             let checkpoint = Checkpoint::delta_tail(cursor);
+            write_change_events_batch(&options.raw_change_log_path, &checkpoint, &result.events)?;
+            *events_written += result.events.len();
+            *delta_pages_fetched += result.pages_fetched;
             checkpoint_store.save(&checkpoint)?;
 
             if !result.has_more {

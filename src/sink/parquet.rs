@@ -1,8 +1,457 @@
-#[derive(Debug, Default)]
-pub struct ParquetSink;
+use std::{
+    fs::{self, File},
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-impl ParquetSink {
-    pub fn milestone_note() -> &'static str {
-        "Parquet writing lands once the event envelope and checkpoint flow are validated."
+use arrow_array::{
+    builder::{Int64Builder, StringBuilder},
+    Array, ArrayRef, Int64Array, RecordBatch, StringArray,
+};
+use arrow_schema::{DataType, Field, Schema};
+use parquet::{
+    arrow::{arrow_reader::ParquetRecordBatchReaderBuilder, ArrowWriter},
+    file::properties::WriterProperties,
+};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+use crate::{
+    errors::{AppError, AppResult},
+    model::{
+        checkpoint::{Checkpoint, SyncState},
+        event::ChangeEvent,
+    },
+    staging::project::{StagingProjection, StagingRow},
+};
+
+pub fn write_change_events_batch(
+    output_dir: &Path,
+    checkpoint: &Checkpoint,
+    events: &[ChangeEvent],
+) -> AppResult<Option<PathBuf>> {
+    if events.is_empty() {
+        return Ok(None);
+    }
+
+    fs::create_dir_all(output_dir)?;
+    let final_path = output_dir.join(batch_file_name(checkpoint));
+    let temp_path = temporary_parquet_path(&final_path);
+
+    let mut file = File::create(&temp_path)?;
+    let schema = parquet_schema();
+    let batch = build_record_batch(schema.clone(), events)?;
+    let properties = WriterProperties::builder().build();
+    let mut writer = ArrowWriter::try_new(&mut file, schema, Some(properties))?;
+    writer.write(&batch)?;
+    writer.close()?;
+    file.sync_all()?;
+    drop(file);
+
+    fs::rename(&temp_path, &final_path)?;
+    sync_parent_directory(final_path.parent())?;
+    Ok(Some(final_path))
+}
+
+pub fn read_change_events_dir(input_dir: &Path) -> AppResult<Vec<ChangeEvent>> {
+    let mut paths: Vec<_> = fs::read_dir(input_dir)?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "parquet"))
+        .collect();
+    paths.sort();
+
+    let mut events = Vec::new();
+    for path in paths {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&path)?)?.build()?;
+        for batch in reader {
+            events.extend(change_events_from_batch(&batch?)?);
+        }
+    }
+    Ok(events)
+}
+
+pub fn write_staging_table(
+    output_root: &Path,
+    projection: &StagingProjection,
+    rows: &[StagingRow],
+) -> AppResult<Option<PathBuf>> {
+    if rows.is_empty() {
+        return Ok(None);
+    }
+
+    let final_path = projection.output_path(output_root);
+    if let Some(parent) = final_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let temp_path = temporary_parquet_path(&final_path);
+
+    let mut file = File::create(&temp_path)?;
+    let schema = staging_schema();
+    let batch = build_staging_record_batch(schema.clone(), rows)?;
+    let properties = WriterProperties::builder().build();
+    let mut writer = ArrowWriter::try_new(&mut file, schema, Some(properties))?;
+    writer.write(&batch)?;
+    writer.close()?;
+    file.sync_all()?;
+    drop(file);
+
+    fs::rename(&temp_path, &final_path)?;
+    sync_parent_directory(final_path.parent())?;
+    Ok(Some(final_path))
+}
+
+fn build_record_batch(schema: Arc<Schema>, events: &[ChangeEvent]) -> AppResult<RecordBatch> {
+    let mut component_path = StringBuilder::new();
+    let mut table_name = StringBuilder::new();
+    let mut document_id = StringBuilder::new();
+    let mut timestamp = Int64Builder::new();
+    let mut op = StringBuilder::new();
+    let mut schema_fingerprint = StringBuilder::new();
+    let mut document = StringBuilder::new();
+
+    for event in events {
+        component_path.append_value(&event.component_path);
+        table_name.append_value(&event.table_name);
+        document_id.append_value(&event.document_id);
+        timestamp.append_value(event.timestamp);
+        op.append_value(event.op.as_str());
+
+        match event.schema_fingerprint.as_deref() {
+            Some(value) => schema_fingerprint.append_value(value),
+            None => schema_fingerprint.append_null(),
+        }
+
+        match event.document.as_ref() {
+            Some(value) => document.append_value(document_json(value)?),
+            None => document.append_null(),
+        }
+    }
+
+    let arrays: Vec<ArrayRef> = vec![
+        Arc::new(component_path.finish()),
+        Arc::new(table_name.finish()),
+        Arc::new(document_id.finish()),
+        Arc::new(timestamp.finish()),
+        Arc::new(op.finish()),
+        Arc::new(schema_fingerprint.finish()),
+        Arc::new(document.finish()),
+    ];
+
+    Ok(RecordBatch::try_new(schema, arrays)?)
+}
+
+fn document_json(value: &Value) -> AppResult<String> {
+    Ok(serde_json::to_string(value)?)
+}
+
+fn parquet_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("component_path", DataType::Utf8, false),
+        Field::new("table_name", DataType::Utf8, false),
+        Field::new("document_id", DataType::Utf8, false),
+        Field::new("timestamp", DataType::Int64, false),
+        Field::new("op", DataType::Utf8, false),
+        Field::new("schema_fingerprint", DataType::Utf8, true),
+        Field::new("document", DataType::Utf8, true),
+    ]))
+}
+
+fn staging_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("component_path", DataType::Utf8, false),
+        Field::new("table_name", DataType::Utf8, false),
+        Field::new("document_id", DataType::Utf8, false),
+        Field::new("timestamp", DataType::Int64, false),
+        Field::new("schema_fingerprint", DataType::Utf8, true),
+        Field::new("document", DataType::Utf8, false),
+    ]))
+}
+
+fn build_staging_record_batch(schema: Arc<Schema>, rows: &[StagingRow]) -> AppResult<RecordBatch> {
+    let mut component_path = StringBuilder::new();
+    let mut table_name = StringBuilder::new();
+    let mut document_id = StringBuilder::new();
+    let mut timestamp = Int64Builder::new();
+    let mut schema_fingerprint = StringBuilder::new();
+    let mut document = StringBuilder::new();
+
+    for row in rows {
+        component_path.append_value(&row.component_path);
+        table_name.append_value(&row.table_name);
+        document_id.append_value(&row.document_id);
+        timestamp.append_value(row.timestamp);
+        match row.schema_fingerprint.as_deref() {
+            Some(value) => schema_fingerprint.append_value(value),
+            None => schema_fingerprint.append_null(),
+        }
+        document.append_value(document_json(&row.document)?);
+    }
+
+    let arrays: Vec<ArrayRef> = vec![
+        Arc::new(component_path.finish()),
+        Arc::new(table_name.finish()),
+        Arc::new(document_id.finish()),
+        Arc::new(timestamp.finish()),
+        Arc::new(schema_fingerprint.finish()),
+        Arc::new(document.finish()),
+    ];
+
+    Ok(RecordBatch::try_new(schema, arrays)?)
+}
+
+fn batch_file_name(checkpoint: &Checkpoint) -> String {
+    let digest = checkpoint_digest(checkpoint);
+    match &checkpoint.sync_state {
+        SyncState::InitialSnapshot { snapshot, .. } => {
+            format!(
+                "{}-{}-{}.parquet",
+                checkpoint.phase_name(),
+                snapshot,
+                &digest[..16]
+            )
+        },
+        SyncState::DeltaTail { cursor } => {
+            format!(
+                "{}-{}-{}.parquet",
+                checkpoint.phase_name(),
+                cursor,
+                &digest[..16]
+            )
+        },
+    }
+}
+
+fn checkpoint_digest(checkpoint: &Checkpoint) -> String {
+    let bytes = serde_json::to_vec(checkpoint).unwrap_or_default();
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn change_events_from_batch(batch: &RecordBatch) -> AppResult<Vec<ChangeEvent>> {
+    let component_path = string_column(batch, 0, "component_path")?;
+    let table_name = string_column(batch, 1, "table_name")?;
+    let document_id = string_column(batch, 2, "document_id")?;
+    let timestamp = int64_column(batch, 3, "timestamp")?;
+    let op = string_column(batch, 4, "op")?;
+    let schema_fingerprint = string_column(batch, 5, "schema_fingerprint")?;
+    let document = string_column(batch, 6, "document")?;
+
+    let mut events = Vec::with_capacity(batch.num_rows());
+    for row in 0..batch.num_rows() {
+        let op = match op.value(row) {
+            "upsert" => crate::model::event::ChangeOperation::Upsert,
+            "delete" => crate::model::event::ChangeOperation::Delete,
+            other => {
+                return Err(AppError::InvalidParquetSchema(format!(
+                    "unexpected op value `{other}`"
+                )))
+            },
+        };
+
+        let document = if document.is_null(row) {
+            None
+        } else {
+            Some(serde_json::from_str::<Value>(document.value(row))?)
+        };
+
+        let schema_fingerprint = if schema_fingerprint.is_null(row) {
+            None
+        } else {
+            Some(schema_fingerprint.value(row).to_string())
+        };
+
+        events.push(ChangeEvent {
+            component_path: component_path.value(row).to_string(),
+            table_name: table_name.value(row).to_string(),
+            document_id: document_id.value(row).to_string(),
+            timestamp: timestamp.value(row),
+            op,
+            schema_fingerprint,
+            document,
+        });
+    }
+    Ok(events)
+}
+
+fn string_column<'a>(
+    batch: &'a RecordBatch,
+    index: usize,
+    name: &str,
+) -> AppResult<&'a StringArray> {
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or_else(|| AppError::InvalidParquetSchema(format!("column `{name}` was not utf8")))
+}
+
+fn int64_column<'a>(batch: &'a RecordBatch, index: usize, name: &str) -> AppResult<&'a Int64Array> {
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<Int64Array>()
+        .ok_or_else(|| AppError::InvalidParquetSchema(format!("column `{name}` was not int64")))
+}
+
+fn temporary_parquet_path(path: &Path) -> PathBuf {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    PathBuf::from(tmp)
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(parent: Option<&Path>) -> AppResult<()> {
+    if let Some(parent) = parent {
+        File::open(parent)?.sync_all()?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_: Option<&Path>) -> AppResult<()> {
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs::{self, File},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use arrow_array::StringArray;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use serde_json::json;
+
+    use crate::{
+        model::{
+            checkpoint::Checkpoint,
+            event::{ChangeEvent, ChangeOperation},
+        },
+        staging::project::{StagingProjection, StagingRow},
+    };
+
+    use super::{read_change_events_dir, write_change_events_batch, write_staging_table};
+
+    #[test]
+    fn writes_parquet_batch() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let output_dir = std::env::temp_dir().join(format!("parquet-batch-{nanos}"));
+        let checkpoint = Checkpoint::delta_tail(42);
+        let events = vec![
+            ChangeEvent {
+                component_path: "".to_string(),
+                table_name: "users".to_string(),
+                document_id: "users:1".to_string(),
+                timestamp: 42,
+                op: ChangeOperation::Upsert,
+                schema_fingerprint: Some("abc".to_string()),
+                document: Some(json!({"name":"Ada"})),
+            },
+            ChangeEvent {
+                component_path: "r2".to_string(),
+                table_name: "metadata".to_string(),
+                document_id: "metadata:1".to_string(),
+                timestamp: 43,
+                op: ChangeOperation::Delete,
+                schema_fingerprint: None,
+                document: None,
+            },
+        ];
+
+        let path = write_change_events_batch(&output_dir, &checkpoint, &events)
+            .unwrap()
+            .unwrap();
+
+        assert!(path.exists());
+        assert!(path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .contains("delta_tail-42"));
+
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&path).unwrap())
+            .unwrap()
+            .build()
+            .unwrap();
+        let batches: Vec<_> = reader.map(|batch| batch.unwrap()).collect();
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].num_rows(), 2);
+
+        let table_name = batches[0]
+            .column(1)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(table_name.value(0), "users");
+        assert_eq!(table_name.value(1), "metadata");
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_dir(output_dir);
+    }
+
+    #[test]
+    fn reads_change_event_batches() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let output_dir = std::env::temp_dir().join(format!("parquet-read-{nanos}"));
+        let checkpoint = Checkpoint::delta_tail(42);
+        let events = vec![ChangeEvent {
+            component_path: "".to_string(),
+            table_name: "users".to_string(),
+            document_id: "users:1".to_string(),
+            timestamp: 42,
+            op: ChangeOperation::Upsert,
+            schema_fingerprint: Some("abc".to_string()),
+            document: Some(json!({"name":"Ada"})),
+        }];
+
+        write_change_events_batch(&output_dir, &checkpoint, &events).unwrap();
+        let roundtrip = read_change_events_dir(&output_dir).unwrap();
+        assert_eq!(roundtrip.len(), 1);
+        assert_eq!(roundtrip[0].document_id, "users:1");
+
+        let _ = fs::remove_dir_all(output_dir);
+    }
+
+    #[test]
+    fn writes_staging_table() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let output_dir = std::env::temp_dir().join(format!("staging-write-{nanos}"));
+        let projection = StagingProjection {
+            component_path: "".to_string(),
+            table_name: "users".to_string(),
+        };
+        let rows = vec![StagingRow {
+            component_path: "".to_string(),
+            table_name: "users".to_string(),
+            document_id: "users:1".to_string(),
+            timestamp: 42,
+            schema_fingerprint: Some("abc".to_string()),
+            document: json!({"name":"Ada"}),
+        }];
+
+        let path = write_staging_table(&output_dir, &projection, &rows)
+            .unwrap()
+            .unwrap();
+        assert!(path.exists());
+
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&path).unwrap())
+            .unwrap()
+            .build()
+            .unwrap();
+        let batches: Vec<_> = reader.map(|batch| batch.unwrap()).collect();
+        assert_eq!(batches[0].num_rows(), 1);
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_dir(output_dir.join("_root"));
+        let _ = fs::remove_dir(output_dir);
     }
 }

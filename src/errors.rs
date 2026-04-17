@@ -4,12 +4,16 @@ pub type AppResult<T> = Result<T, AppError>;
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("arrow error: {0}")]
+    Arrow(#[from] arrow_schema::ArrowError),
     #[error("http request failed: {0}")]
     Http(#[from] reqwest::Error),
     #[error("i/o failed: {0}")]
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("parquet error: {0}")]
+    Parquet(#[from] parquet::errors::ParquetError),
     #[error("url error: {0}")]
     Url(#[from] url::ParseError),
     #[error("invalid deploy URL: {0}")]
@@ -30,6 +34,8 @@ pub enum AppError {
     MissingSnapshotCursor,
     #[error("unsupported checkpoint version {0}")]
     UnsupportedCheckpointVersion(i64),
+    #[error("invalid parquet schema: {0}")]
+    InvalidParquetSchema(String),
     #[error("failed to initialize telemetry: {0}")]
     TelemetryInit(String),
 }
