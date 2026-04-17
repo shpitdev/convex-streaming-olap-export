@@ -74,6 +74,7 @@ pub fn write_staging_table(
     output_root: &Path,
     projection: &StagingProjection,
     rows: &[StagingRow],
+    columns: &[StagingColumnProjection],
 ) -> AppResult<Option<PathBuf>> {
     if rows.is_empty() {
         return Ok(None);
@@ -86,9 +87,8 @@ pub fn write_staging_table(
     let temp_path = temporary_parquet_path(&final_path);
 
     let mut file = File::create(&temp_path)?;
-    let columns = infer_staging_columns(rows);
-    let schema = staging_schema(&columns);
-    let batch = build_staging_record_batch(schema.clone(), rows, &columns)?;
+    let schema = staging_schema(columns);
+    let batch = build_staging_record_batch(schema.clone(), rows, columns)?;
     let properties = WriterProperties::builder().build();
     let mut writer = ArrowWriter::try_new(&mut file, schema, Some(properties))?;
     writer.write(&batch)?;
@@ -227,85 +227,6 @@ fn build_staging_record_batch(
     arrays.push(Arc::new(full_document_json.finish()));
 
     Ok(RecordBatch::try_new(schema, arrays)?)
-}
-
-fn infer_staging_columns(rows: &[StagingRow]) -> Vec<StagingColumnProjection> {
-    let mut observed = std::collections::BTreeMap::<String, ObservedColumnKind>::new();
-    for row in rows {
-        let Some(object) = row.document.as_object() else {
-            continue;
-        };
-        for (field_name, value) in object {
-            if is_reserved_staging_column(field_name) {
-                continue;
-            }
-            observed
-                .entry(field_name.clone())
-                .or_default()
-                .observe(value);
-        }
-    }
-
-    observed
-        .into_iter()
-        .filter_map(|(name, observed)| {
-            observed
-                .final_kind()
-                .map(|kind| StagingColumnProjection { name, kind })
-        })
-        .collect()
-}
-
-fn is_reserved_staging_column(field_name: &str) -> bool {
-    matches!(
-        field_name,
-        "_component_path"
-            | "_table_name"
-            | "_document_id"
-            | "_timestamp"
-            | "_schema_fingerprint"
-            | "_document_json"
-    )
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct ObservedColumnKind {
-    kind: Option<StagingColumnKind>,
-}
-
-impl ObservedColumnKind {
-    fn observe(&mut self, value: &Value) {
-        if value.is_null() {
-            return;
-        }
-        let next = classify_value(value);
-        self.kind = Some(match self.kind {
-            None => next,
-            Some(StagingColumnKind::Int64) if next == StagingColumnKind::Float64 => {
-                StagingColumnKind::Float64
-            },
-            Some(StagingColumnKind::Float64) if next == StagingColumnKind::Int64 => {
-                StagingColumnKind::Float64
-            },
-            Some(existing) if existing == next => existing,
-            _ => StagingColumnKind::JsonUtf8,
-        });
-    }
-
-    fn final_kind(self) -> Option<StagingColumnKind> {
-        self.kind
-    }
-}
-
-fn classify_value(value: &Value) -> StagingColumnKind {
-    match value {
-        Value::Bool(_) => StagingColumnKind::Boolean,
-        Value::Number(number) if number.is_i64() => StagingColumnKind::Int64,
-        Value::Number(_) => StagingColumnKind::Float64,
-        Value::String(_) => StagingColumnKind::Utf8,
-        Value::Array(_) | Value::Object(_) => StagingColumnKind::JsonUtf8,
-        Value::Null => StagingColumnKind::JsonUtf8,
-    }
 }
 
 enum DynamicBuilder {
@@ -490,7 +411,9 @@ mod tests {
             checkpoint::Checkpoint,
             event::{ChangeEvent, ChangeOperation},
         },
-        staging::project::{StagingProjection, StagingRow},
+        staging::project::{
+            StagingColumnKind, StagingColumnProjection, StagingProjection, StagingRow,
+        },
     };
 
     use super::{read_change_events_dir, write_change_events_batch, write_staging_table};
@@ -592,6 +515,10 @@ mod tests {
             component_path: "".to_string(),
             table_name: "users".to_string(),
         };
+        let columns = vec![StagingColumnProjection {
+            name: "name".to_string(),
+            kind: StagingColumnKind::Utf8,
+        }];
         let rows = vec![StagingRow {
             component_path: "".to_string(),
             table_name: "users".to_string(),
@@ -601,7 +528,7 @@ mod tests {
             document: json!({"name":"Ada"}),
         }];
 
-        let path = write_staging_table(&output_dir, &projection, &rows)
+        let path = write_staging_table(&output_dir, &projection, &rows, &columns)
             .unwrap()
             .unwrap();
         assert!(path.exists());

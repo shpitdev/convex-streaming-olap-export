@@ -63,6 +63,7 @@ impl ExportRunner {
         let mut delta_pages_fetched = 0usize;
         let mut events_written = 0usize;
 
+        self.schemas.write_snapshot(&options.raw_change_log_path)?;
         let mut checkpoint = checkpoint_store.load()?;
         let delta_cursor = match checkpoint.as_ref().map(|checkpoint| &checkpoint.sync_state) {
             None => {
