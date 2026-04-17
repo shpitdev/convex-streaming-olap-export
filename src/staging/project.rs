@@ -19,6 +19,21 @@ pub struct StagingRow {
     pub document: Value,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StagingColumnKind {
+    Boolean,
+    Int64,
+    Float64,
+    Utf8,
+    JsonUtf8,
+}
+
+#[derive(Debug, Clone)]
+pub struct StagingColumnProjection {
+    pub name: String,
+    pub kind: StagingColumnKind,
+}
+
 impl StagingProjection {
     pub fn output_path(&self, root: &Path) -> PathBuf {
         let mut path = root.to_path_buf();

@@ -5,7 +5,7 @@ use std::{
 };
 
 use arrow_array::{
-    builder::{Int64Builder, StringBuilder},
+    builder::{BooleanBuilder, Float64Builder, Int64Builder, StringBuilder},
     Array, ArrayRef, Int64Array, RecordBatch, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema};
@@ -22,7 +22,7 @@ use crate::{
         checkpoint::{Checkpoint, SyncState},
         event::ChangeEvent,
     },
-    staging::project::{StagingProjection, StagingRow},
+    staging::project::{StagingColumnKind, StagingColumnProjection, StagingProjection, StagingRow},
 };
 
 pub fn write_change_events_batch(
@@ -86,8 +86,9 @@ pub fn write_staging_table(
     let temp_path = temporary_parquet_path(&final_path);
 
     let mut file = File::create(&temp_path)?;
-    let schema = staging_schema();
-    let batch = build_staging_record_batch(schema.clone(), rows)?;
+    let columns = infer_staging_columns(rows);
+    let schema = staging_schema(&columns);
+    let batch = build_staging_record_batch(schema.clone(), rows, &columns)?;
     let properties = WriterProperties::builder().build();
     let mut writer = ArrowWriter::try_new(&mut file, schema, Some(properties))?;
     writer.write(&batch)?;
@@ -156,24 +157,45 @@ fn parquet_schema() -> Arc<Schema> {
     ]))
 }
 
-fn staging_schema() -> Arc<Schema> {
-    Arc::new(Schema::new(vec![
-        Field::new("component_path", DataType::Utf8, false),
-        Field::new("table_name", DataType::Utf8, false),
-        Field::new("document_id", DataType::Utf8, false),
-        Field::new("timestamp", DataType::Int64, false),
-        Field::new("schema_fingerprint", DataType::Utf8, true),
-        Field::new("document", DataType::Utf8, false),
-    ]))
+fn staging_schema(columns: &[StagingColumnProjection]) -> Arc<Schema> {
+    let mut fields = vec![
+        Field::new("_component_path", DataType::Utf8, false),
+        Field::new("_table_name", DataType::Utf8, false),
+        Field::new("_document_id", DataType::Utf8, false),
+        Field::new("_timestamp", DataType::Int64, false),
+        Field::new("_schema_fingerprint", DataType::Utf8, true),
+    ];
+    fields.extend(columns.iter().map(|column| {
+        Field::new(
+            &column.name,
+            match column.kind {
+                StagingColumnKind::Boolean => DataType::Boolean,
+                StagingColumnKind::Int64 => DataType::Int64,
+                StagingColumnKind::Float64 => DataType::Float64,
+                StagingColumnKind::Utf8 | StagingColumnKind::JsonUtf8 => DataType::Utf8,
+            },
+            true,
+        )
+    }));
+    fields.push(Field::new("_document_json", DataType::Utf8, false));
+    Arc::new(Schema::new(fields))
 }
 
-fn build_staging_record_batch(schema: Arc<Schema>, rows: &[StagingRow]) -> AppResult<RecordBatch> {
+fn build_staging_record_batch(
+    schema: Arc<Schema>,
+    rows: &[StagingRow],
+    columns: &[StagingColumnProjection],
+) -> AppResult<RecordBatch> {
     let mut component_path = StringBuilder::new();
     let mut table_name = StringBuilder::new();
     let mut document_id = StringBuilder::new();
     let mut timestamp = Int64Builder::new();
     let mut schema_fingerprint = StringBuilder::new();
-    let mut document = StringBuilder::new();
+    let mut full_document_json = StringBuilder::new();
+    let mut dynamic_builders: Vec<DynamicBuilder> = columns
+        .iter()
+        .map(|column| DynamicBuilder::new(column.kind))
+        .collect();
 
     for row in rows {
         component_path.append_value(&row.component_path);
@@ -184,19 +206,160 @@ fn build_staging_record_batch(schema: Arc<Schema>, rows: &[StagingRow]) -> AppRe
             Some(value) => schema_fingerprint.append_value(value),
             None => schema_fingerprint.append_null(),
         }
-        document.append_value(document_json(&row.document)?);
+        for (column, builder) in columns.iter().zip(dynamic_builders.iter_mut()) {
+            let value = row
+                .document
+                .as_object()
+                .and_then(|object| object.get(&column.name));
+            builder.append(value)?;
+        }
+        full_document_json.append_value(document_json(&row.document)?);
     }
 
-    let arrays: Vec<ArrayRef> = vec![
+    let mut arrays: Vec<ArrayRef> = vec![
         Arc::new(component_path.finish()),
         Arc::new(table_name.finish()),
         Arc::new(document_id.finish()),
         Arc::new(timestamp.finish()),
         Arc::new(schema_fingerprint.finish()),
-        Arc::new(document.finish()),
     ];
+    arrays.extend(dynamic_builders.into_iter().map(DynamicBuilder::finish));
+    arrays.push(Arc::new(full_document_json.finish()));
 
     Ok(RecordBatch::try_new(schema, arrays)?)
+}
+
+fn infer_staging_columns(rows: &[StagingRow]) -> Vec<StagingColumnProjection> {
+    let mut observed = std::collections::BTreeMap::<String, ObservedColumnKind>::new();
+    for row in rows {
+        let Some(object) = row.document.as_object() else {
+            continue;
+        };
+        for (field_name, value) in object {
+            if is_reserved_staging_column(field_name) {
+                continue;
+            }
+            observed
+                .entry(field_name.clone())
+                .or_default()
+                .observe(value);
+        }
+    }
+
+    observed
+        .into_iter()
+        .filter_map(|(name, observed)| {
+            observed
+                .final_kind()
+                .map(|kind| StagingColumnProjection { name, kind })
+        })
+        .collect()
+}
+
+fn is_reserved_staging_column(field_name: &str) -> bool {
+    matches!(
+        field_name,
+        "_component_path"
+            | "_table_name"
+            | "_document_id"
+            | "_timestamp"
+            | "_schema_fingerprint"
+            | "_document_json"
+    )
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ObservedColumnKind {
+    kind: Option<StagingColumnKind>,
+}
+
+impl ObservedColumnKind {
+    fn observe(&mut self, value: &Value) {
+        if value.is_null() {
+            return;
+        }
+        let next = classify_value(value);
+        self.kind = Some(match self.kind {
+            None => next,
+            Some(StagingColumnKind::Int64) if next == StagingColumnKind::Float64 => {
+                StagingColumnKind::Float64
+            },
+            Some(StagingColumnKind::Float64) if next == StagingColumnKind::Int64 => {
+                StagingColumnKind::Float64
+            },
+            Some(existing) if existing == next => existing,
+            _ => StagingColumnKind::JsonUtf8,
+        });
+    }
+
+    fn final_kind(self) -> Option<StagingColumnKind> {
+        self.kind
+    }
+}
+
+fn classify_value(value: &Value) -> StagingColumnKind {
+    match value {
+        Value::Bool(_) => StagingColumnKind::Boolean,
+        Value::Number(number) if number.is_i64() => StagingColumnKind::Int64,
+        Value::Number(_) => StagingColumnKind::Float64,
+        Value::String(_) => StagingColumnKind::Utf8,
+        Value::Array(_) | Value::Object(_) => StagingColumnKind::JsonUtf8,
+        Value::Null => StagingColumnKind::JsonUtf8,
+    }
+}
+
+enum DynamicBuilder {
+    Boolean(BooleanBuilder),
+    Int64(Int64Builder),
+    Float64(Float64Builder),
+    Utf8(StringBuilder),
+}
+
+impl DynamicBuilder {
+    fn new(kind: StagingColumnKind) -> Self {
+        match kind {
+            StagingColumnKind::Boolean => Self::Boolean(BooleanBuilder::new()),
+            StagingColumnKind::Int64 => Self::Int64(Int64Builder::new()),
+            StagingColumnKind::Float64 => Self::Float64(Float64Builder::new()),
+            StagingColumnKind::Utf8 | StagingColumnKind::JsonUtf8 => {
+                Self::Utf8(StringBuilder::new())
+            },
+        }
+    }
+
+    fn append(&mut self, value: Option<&Value>) -> AppResult<()> {
+        match self {
+            Self::Boolean(builder) => match value.and_then(Value::as_bool) {
+                Some(value) => builder.append_value(value),
+                None => builder.append_null(),
+            },
+            Self::Int64(builder) => match value.and_then(Value::as_i64) {
+                Some(value) => builder.append_value(value),
+                None => builder.append_null(),
+            },
+            Self::Float64(builder) => match value
+                .and_then(|value| value.as_f64().or_else(|| value.as_i64().map(|v| v as f64)))
+            {
+                Some(value) => builder.append_value(value),
+                None => builder.append_null(),
+            },
+            Self::Utf8(builder) => match value {
+                Some(Value::String(value)) => builder.append_value(value),
+                Some(other) => builder.append_value(document_json(other)?),
+                None => builder.append_null(),
+            },
+        }
+        Ok(())
+    }
+
+    fn finish(self) -> ArrayRef {
+        match self {
+            Self::Boolean(mut builder) => Arc::new(builder.finish()),
+            Self::Int64(mut builder) => Arc::new(builder.finish()),
+            Self::Float64(mut builder) => Arc::new(builder.finish()),
+            Self::Utf8(mut builder) => Arc::new(builder.finish()),
+        }
+    }
 }
 
 fn batch_file_name(checkpoint: &Checkpoint) -> String {

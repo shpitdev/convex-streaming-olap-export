@@ -134,7 +134,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use arrow_array::StringArray;
+    use arrow_array::{Float64Array, StringArray};
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use serde_json::json;
 
@@ -178,7 +178,7 @@ mod tests {
                     timestamp: 11,
                     op: ChangeOperation::Upsert,
                     schema_fingerprint: Some("abc".to_string()),
-                    document: Some(json!({"name":"Ben"})),
+                    document: Some(json!({"name":"Ben","age":20})),
                 },
                 ChangeEvent {
                     component_path: "workflow".to_string(),
@@ -204,7 +204,7 @@ mod tests {
                     timestamp: 20,
                     op: ChangeOperation::Upsert,
                     schema_fingerprint: Some("abc".to_string()),
-                    document: Some(json!({"name":"Ada Lovelace"})),
+                    document: Some(json!({"name":"Ada Lovelace","age":10.5,"meta":{"tier":"pro"}})),
                 },
                 ChangeEvent {
                     component_path: "".to_string(),
@@ -243,6 +243,18 @@ mod tests {
             .downcast_ref::<StringArray>()
             .unwrap();
         assert_eq!(doc_ids.value(0), "users:1");
+        let age = batches[0]
+            .column(5)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
+        assert_eq!(age.value(0), 10.5);
+        let meta = batches[0]
+            .column(6)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert!(meta.value(0).contains("\"tier\":\"pro\""));
 
         let workflow_events = output.join("workflow").join("events.parquet");
         assert!(workflow_events.exists());
