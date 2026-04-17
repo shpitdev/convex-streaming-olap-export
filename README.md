@@ -113,10 +113,26 @@ Then run commands like:
 - `cargo run --bin convex-export -- deltas --cursor 0`
 - `cargo run --bin convex-export -- sync-once`
 - `just verify`
+- `just install-hooks`
 - `just sync-once`
+- `just depot-ci --job fmt`
 
 `sync-once` appends normalized events to `.memory/raw_change_log.jsonl` and
 stores checkpoint state in `.memory/raw_change_log.checkpoint.json` by default.
+
+## Quality Gates
+
+Local:
+
+- `just install-hooks` configures a repo-local pre-commit hook
+- the hook runs `just verify`
+
+Remote:
+
+- `.github/workflows/ci.yml` is the baseline GitHub workflow
+- `.depot/workflows/ci.yml` is the preferred Depot CI workflow
+
+During rollout, keep both until the Depot path is fully trusted.
 
 ## References
 

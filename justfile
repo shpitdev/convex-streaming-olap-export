@@ -1,6 +1,10 @@
 default:
   just --list
 
+install-hooks:
+  git config --local core.hooksPath .githooks
+  chmod +x .githooks/pre-commit
+
 fmt:
   cargo fmt
 
@@ -17,6 +21,9 @@ clippy:
   cargo clippy --all-targets --all-features -- -D warnings
 
 verify: fmt-check clippy test
+
+depot-ci *args:
+  depot ci run --workflow .depot/workflows/ci.yml {{args}}
 
 schemas *args:
   cargo run --bin convex-export -- schemas {{args}}
