@@ -1,8 +1,6 @@
 {
     "recommendations": [
-        "databricks.databricks",
         "hashicorp.terraform",
-        "rust-lang.rust-analyzer",
-        "ms-toolsai.datawrangler"
+        "rust-lang.rust-analyzer"
     ]
 }

@@ -87,7 +87,6 @@ sanitize_table_name() {
 map_path="$work_dir/statements/001_source_map.sql"
 {
   echo "CREATE OR REPLACE VIEW \`$catalog\`.\`$schema\`.\`__source_map\` AS"
-  echo "SELECT * FROM VALUES"
   mapfile -t source_rows < <(
     jq -r '
       .tables
@@ -105,22 +104,36 @@ map_path="$work_dir/statements/001_source_map.sql"
       | @tsv
     ' "$manifest_path"
   )
-  for idx in "${!source_rows[@]}"; do
-    IFS=$'\t' read -r relative_path current_key versioned_key sha256 bytes ordinal <<<"${source_rows[$idx]}"
-    comma=","
-    if [ "$idx" -eq "$(( ${#source_rows[@]} - 1 ))" ]; then
-      comma=""
-    fi
-    printf "  ('%s', '%s', '%s', '%s', %s, %s)%s\n" \
-      "${relative_path//\'/\'\'}" \
-      "${current_key//\'/\'\'}" \
-      "${versioned_key//\'/\'\'}" \
-      "${sha256//\'/\'\'}" \
-      "$bytes" \
-      "$ordinal" \
-      "$comma"
-  done
-  echo "AS source_map(relative_path, current_key, versioned_key, sha256, bytes, ordinal);"
+  if [ "${#source_rows[@]}" -eq 0 ]; then
+    cat <<'EOF'
+SELECT
+  CAST(NULL AS STRING) AS relative_path,
+  CAST(NULL AS STRING) AS current_key,
+  CAST(NULL AS STRING) AS versioned_key,
+  CAST(NULL AS STRING) AS sha256,
+  CAST(NULL AS BIGINT) AS bytes,
+  CAST(NULL AS BIGINT) AS ordinal
+WHERE 1 = 0;
+EOF
+  else
+    echo "SELECT * FROM VALUES"
+    for idx in "${!source_rows[@]}"; do
+      IFS=$'\t' read -r relative_path current_key versioned_key sha256 bytes ordinal <<<"${source_rows[$idx]}"
+      comma=","
+      if [ "$idx" -eq "$(( ${#source_rows[@]} - 1 ))" ]; then
+        comma=""
+      fi
+      printf "  ('%s', '%s', '%s', '%s', %s, %s)%s\n" \
+        "${relative_path//\'/\'\'}" \
+        "${current_key//\'/\'\'}" \
+        "${versioned_key//\'/\'\'}" \
+        "${sha256//\'/\'\'}" \
+        "$bytes" \
+        "$ordinal" \
+        "$comma"
+    done
+    echo "AS source_map(relative_path, current_key, versioned_key, sha256, bytes, ordinal);"
+  fi
 } > "$map_path"
 
 jq -r '.tables | to_entries | sort_by(.key)[] | [.key, .value.current_key] | @tsv' "$manifest_path" |

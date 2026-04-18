@@ -178,8 +178,8 @@ Defaults:
 The sync renders SQL and statement results into `.memory/databricks-view-sync/`
 before applying them.
 
-VS Code recommendations live in `.vscode/extensions.json`, including Rust,
-Terraform, Databricks, and Data Wrangler.
+VS Code recommendations live in `.vscode/extensions.json`, limited to Rust and
+Terraform.
 
 ## Quality Gates
 
