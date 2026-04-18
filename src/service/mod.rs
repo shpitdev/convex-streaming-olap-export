@@ -51,10 +51,7 @@ pub async fn run_service(client: &ConvexClient, options: &RunOptions) -> AppResu
     let mut last_iteration: Option<RunIterationSummary> = None;
 
     loop {
-        if options
-            .max_iterations
-            .is_some_and(|max_iterations| iterations_completed >= max_iterations)
-        {
+        if reached_iteration_limit(iterations_completed, options.max_iterations) {
             return Ok(RunSummary {
                 iterations_completed,
                 stop_reason: "max_iterations_reached".to_string(),
@@ -67,6 +64,14 @@ pub async fn run_service(client: &ConvexClient, options: &RunOptions) -> AppResu
         log_iteration(&iteration_summary);
         last_iteration = Some(iteration_summary);
         iterations_completed = iteration;
+
+        if reached_iteration_limit(iterations_completed, options.max_iterations) {
+            return Ok(RunSummary {
+                iterations_completed,
+                stop_reason: "max_iterations_reached".to_string(),
+                last_iteration,
+            });
+        }
 
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
@@ -131,6 +136,10 @@ async fn load_schema_catalog(client: &ConvexClient) -> AppResult<SchemaCatalog> 
         .json_schemas(&JsonSchemasQuery { delta_schema: true })
         .await?;
     Ok(SchemaCatalog::from_json_schemas(&response.payload))
+}
+
+fn reached_iteration_limit(iterations_completed: usize, max_iterations: Option<usize>) -> bool {
+    max_iterations.is_some_and(|max_iterations| iterations_completed >= max_iterations)
 }
 
 fn validate_run_options(options: &RunOptions) -> AppResult<()> {
@@ -251,5 +260,13 @@ mod tests {
         let mut summary = sample_staging_summary();
         summary.affected_tables = 1;
         assert!(should_publish(&summary));
+    }
+
+    #[test]
+    fn reached_iteration_limit_is_inclusive() {
+        assert!(!super::reached_iteration_limit(0, Some(1)));
+        assert!(super::reached_iteration_limit(1, Some(1)));
+        assert!(super::reached_iteration_limit(2, Some(1)));
+        assert!(!super::reached_iteration_limit(0, None));
     }
 }
