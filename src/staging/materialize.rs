@@ -200,6 +200,8 @@ impl StagingMaterializer {
         let all_events = read_change_events_files(&all_paths)?;
         let current_state = fold_current_state(all_events);
         let schema_catalog = SchemaCatalog::read_snapshot(&options.raw_change_log_dir).ok();
+        let files_read = all_paths.len();
+        let events_read = new_events.len() + current_state.len();
 
         let mut rows_materialized = 0usize;
         for projection in &affected {
@@ -256,8 +258,8 @@ impl StagingMaterializer {
             mode: "incremental".to_string(),
             raw_change_log_dir: options.raw_change_log_dir.clone(),
             output_dir: options.output_dir.clone(),
-            files_read: new_paths.len(),
-            events_read: new_events.len(),
+            files_read,
+            events_read,
             new_raw_files: new_paths.len(),
             affected_tables: affected.len(),
             tables_materialized: affected.len(),
