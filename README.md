@@ -139,7 +139,7 @@ Local:
 Remote:
 
 - `.depot/workflows/ci.yml` is the single fmt/clippy/test CI workflow
-- CodeQL remains separate from the main quality gate
+- `.github/workflows/semgrep.yml` is the lightweight security scan workflow
 
 ## References
 
