@@ -199,7 +199,7 @@ impl StagingMaterializer {
             })
             .collect();
 
-        let all_events = read_change_events_dir(&options.raw_change_log_dir)?;
+        let all_events = read_change_events_files(&all_paths)?;
         let current_state = fold_current_state(all_events);
         let schema_catalog = SchemaCatalog::read_snapshot(&options.raw_change_log_dir).ok();
 
