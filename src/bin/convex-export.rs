@@ -132,6 +132,12 @@ struct MaterializeStagingArgs {
 
     #[arg(long, default_value = ".memory/staging")]
     output: PathBuf,
+
+    #[arg(long)]
+    incremental: bool,
+
+    #[arg(long)]
+    state_path: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -282,6 +288,8 @@ async fn handle_materialize_staging(args: MaterializeStagingArgs) -> AppResult<(
     let summary = StagingMaterializer::materialize(&MaterializeStagingOptions {
         raw_change_log_dir: args.raw_change_log,
         output_dir: args.output,
+        incremental: args.incremental,
+        state_path: args.state_path,
     })?;
 
     let stdout = io::stdout();

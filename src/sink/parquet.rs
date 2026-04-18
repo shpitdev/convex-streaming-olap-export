@@ -54,15 +54,23 @@ pub fn write_change_events_batch(
 }
 
 pub fn read_change_events_dir(input_dir: &Path) -> AppResult<Vec<ChangeEvent>> {
+    let paths = list_change_event_batch_paths(input_dir)?;
+    read_change_events_files(&paths)
+}
+
+pub fn list_change_event_batch_paths(input_dir: &Path) -> AppResult<Vec<PathBuf>> {
     let mut paths: Vec<_> = fs::read_dir(input_dir)?
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
         .filter(|path| path.extension().is_some_and(|ext| ext == "parquet"))
         .collect();
     paths.sort();
+    Ok(paths)
+}
 
+pub fn read_change_events_files(paths: &[PathBuf]) -> AppResult<Vec<ChangeEvent>> {
     let mut events = Vec::new();
     for path in paths {
-        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&path)?)?.build()?;
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(path)?)?.build()?;
         for batch in reader {
             events.extend(change_events_from_batch(&batch?)?);
         }

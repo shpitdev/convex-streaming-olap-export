@@ -125,6 +125,10 @@ and stores checkpoint state in `.memory/raw_change_log.checkpoint.json` by defau
 `materialize-staging` rebuilds source-conformed current-state Parquet tables under
 `.memory/staging/` from the Parquet `raw_change_log` dataset.
 
+Use `materialize-staging --incremental` to update only the tables affected by
+new raw Parquet batches, while keeping the full rebuild path available as the
+correctness fallback.
+
 ## Quality Gates
 
 Local:
@@ -134,10 +138,8 @@ Local:
 
 Remote:
 
-- `.github/workflows/ci.yml` is the baseline GitHub workflow
-- `.depot/workflows/ci.yml` is the preferred Depot CI workflow
-
-During rollout, keep both until the Depot path is fully trusted.
+- `.depot/workflows/ci.yml` is the single fmt/clippy/test CI workflow
+- `.github/workflows/semgrep.yml` is the lightweight security scan workflow
 
 ## References
 

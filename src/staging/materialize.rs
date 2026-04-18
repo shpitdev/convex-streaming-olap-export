@@ -1,7 +1,7 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use serde::Serialize;
@@ -13,22 +13,28 @@ use crate::{
         event::{ChangeEvent, ChangeOperation},
         schema::SchemaCatalog,
     },
-    sink::parquet::{read_change_events_dir, write_staging_table},
+    sink::parquet::{list_change_event_batch_paths, read_change_events_files, write_staging_table},
     staging::project::{StagingColumnKind, StagingColumnProjection, StagingProjection, StagingRow},
+    staging::state::{schema_snapshot_hash, FileStagingStateStore, StagingState},
 };
 
 #[derive(Debug, Clone)]
 pub struct MaterializeStagingOptions {
     pub raw_change_log_dir: PathBuf,
     pub output_dir: PathBuf,
+    pub incremental: bool,
+    pub state_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MaterializeStagingSummary {
+    pub mode: String,
     pub raw_change_log_dir: PathBuf,
     pub output_dir: PathBuf,
     pub files_read: usize,
     pub events_read: usize,
+    pub new_raw_files: usize,
+    pub affected_tables: usize,
     pub tables_materialized: usize,
     pub rows_materialized: usize,
 }
@@ -40,9 +46,25 @@ impl StagingMaterializer {
     pub fn materialize(
         options: &MaterializeStagingOptions,
     ) -> AppResult<MaterializeStagingSummary> {
-        let events = read_change_events_dir(&options.raw_change_log_dir)?;
-        let files_read = parquet_file_count(&options.raw_change_log_dir)?;
+        let state_path = options
+            .state_path
+            .clone()
+            .unwrap_or_else(|| options.output_dir.join("_state.json"));
+        let state_store = FileStagingStateStore::new(&state_path);
+        let schema_hash = schema_snapshot_hash(&options.raw_change_log_dir)?;
+        if options.incremental {
+            if let Some(summary) =
+                Self::try_incremental(options, &state_store, schema_hash.clone())?
+            {
+                return Ok(summary);
+            }
+        }
+
+        let all_paths = list_change_event_batch_paths(&options.raw_change_log_dir)?;
+        let files_read = all_paths.len();
+        let events = read_change_events_files(&all_paths)?;
         let events_read = events.len();
+        let new_raw_files = files_read;
         let schema_catalog = SchemaCatalog::read_snapshot(&options.raw_change_log_dir).ok();
 
         let current_state = fold_current_state(events);
@@ -77,6 +99,7 @@ impl StagingMaterializer {
 
         let mut rows_materialized = 0usize;
         let tables_materialized = per_table.len();
+        let affected_tables = tables_materialized;
 
         let mut tables: Vec<_> = per_table.into_iter().collect();
         tables.sort_by(|(left, _), (right, _)| {
@@ -101,14 +124,147 @@ impl StagingMaterializer {
             write_staging_table(&options.output_dir, &projection, &rows, &columns)?;
         }
 
+        let processed_raw_files = all_paths
+            .into_iter()
+            .filter_map(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+            })
+            .collect();
+        state_store.save(&StagingState::new(schema_hash, processed_raw_files))?;
+
         Ok(MaterializeStagingSummary {
+            mode: "full_rebuild".to_string(),
             raw_change_log_dir: options.raw_change_log_dir.clone(),
             output_dir: options.output_dir.clone(),
             files_read,
             events_read,
+            new_raw_files,
+            affected_tables,
             tables_materialized,
             rows_materialized,
         })
+    }
+
+    fn try_incremental(
+        options: &MaterializeStagingOptions,
+        state_store: &FileStagingStateStore,
+        schema_hash: Option<String>,
+    ) -> AppResult<Option<MaterializeStagingSummary>> {
+        let Some(state) = state_store.load()? else {
+            return Ok(None);
+        };
+
+        if state.schema_snapshot_hash != schema_hash {
+            return Ok(None);
+        }
+
+        let all_paths = list_change_event_batch_paths(&options.raw_change_log_dir)?;
+        let new_paths: Vec<_> = all_paths
+            .iter()
+            .filter(|path| {
+                path.file_name()
+                    .map(|name| {
+                        !state
+                            .processed_raw_files
+                            .contains(&name.to_string_lossy().to_string())
+                    })
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect();
+
+        if new_paths.is_empty() {
+            return Ok(Some(MaterializeStagingSummary {
+                mode: "incremental".to_string(),
+                raw_change_log_dir: options.raw_change_log_dir.clone(),
+                output_dir: options.output_dir.clone(),
+                files_read: 0,
+                events_read: 0,
+                new_raw_files: 0,
+                affected_tables: 0,
+                tables_materialized: 0,
+                rows_materialized: 0,
+            }));
+        }
+
+        let new_events = read_change_events_files(&new_paths)?;
+        let affected: BTreeSet<StagingProjection> = new_events
+            .iter()
+            .map(|event| StagingProjection {
+                component_path: event.component_path.clone(),
+                table_name: event.table_name.clone(),
+            })
+            .collect();
+
+        let all_events = read_change_events_files(&all_paths)?;
+        let current_state = fold_current_state(all_events);
+        let schema_catalog = SchemaCatalog::read_snapshot(&options.raw_change_log_dir).ok();
+        let files_read = all_paths.len();
+        let events_read = new_events.len() + current_state.len();
+
+        let mut rows_materialized = 0usize;
+        for projection in &affected {
+            let mut rows: Vec<_> = current_state
+                .values()
+                .filter(|event| {
+                    event.op != ChangeOperation::Delete
+                        && event.component_path == projection.component_path
+                        && event.table_name == projection.table_name
+                })
+                .filter_map(|event| {
+                    event.document.as_ref().map(|document| StagingRow {
+                        component_path: event.component_path.clone(),
+                        table_name: event.table_name.clone(),
+                        document_id: event.document_id.clone(),
+                        timestamp: event.timestamp,
+                        schema_fingerprint: event.schema_fingerprint.clone(),
+                        document: document.clone(),
+                    })
+                })
+                .collect();
+
+            rows.sort_by(|left, right| {
+                left.document_id
+                    .cmp(&right.document_id)
+                    .then_with(|| left.timestamp.cmp(&right.timestamp))
+            });
+
+            rows_materialized += rows.len();
+            let columns = infer_staging_columns(
+                &rows,
+                schema_catalog
+                    .as_ref()
+                    .and_then(|catalog| catalog.schema_for(&projection.table_name)),
+            );
+            let path = projection.output_path(&options.output_dir);
+            if rows.is_empty() {
+                let _ = fs::remove_file(path);
+            } else {
+                write_staging_table(&options.output_dir, projection, &rows, &columns)?;
+            }
+        }
+
+        let processed_raw_files = all_paths
+            .into_iter()
+            .filter_map(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+            })
+            .collect();
+        state_store.save(&StagingState::new(schema_hash, processed_raw_files))?;
+
+        Ok(Some(MaterializeStagingSummary {
+            mode: "incremental".to_string(),
+            raw_change_log_dir: options.raw_change_log_dir.clone(),
+            output_dir: options.output_dir.clone(),
+            files_read,
+            events_read,
+            new_raw_files: new_paths.len(),
+            affected_tables: affected.len(),
+            tables_materialized: affected.len(),
+            rows_materialized,
+        }))
     }
 }
 
@@ -129,13 +285,6 @@ fn fold_current_state(events: Vec<ChangeEvent>) -> HashMap<(String, String, Stri
         }
     }
     latest
-}
-
-fn parquet_file_count(dir: &Path) -> AppResult<usize> {
-    Ok(fs::read_dir(dir)?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.extension().is_some_and(|ext| ext == "parquet"))
-        .count())
 }
 
 fn infer_staging_columns(
@@ -342,6 +491,7 @@ mod tests {
         model::{
             checkpoint::Checkpoint,
             event::{ChangeEvent, ChangeOperation},
+            schema::SchemaCatalog,
         },
         sink::parquet::write_change_events_batch,
     };
@@ -422,6 +572,8 @@ mod tests {
         let summary = StagingMaterializer::materialize(&MaterializeStagingOptions {
             raw_change_log_dir: raw.clone(),
             output_dir: output.clone(),
+            incremental: false,
+            state_path: None,
         })
         .unwrap();
 
@@ -456,6 +608,96 @@ mod tests {
             .unwrap();
         assert!(meta.value(0).contains("\"tier\":\"pro\""));
         let workflow_events = output.join("workflow").join("events.parquet");
+        assert!(workflow_events.exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn incrementally_updates_only_affected_tables() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("staging-incremental-{nanos}"));
+        let raw = root.join("raw");
+        let output = root.join("staging");
+        let state_path = root.join("staging-state.json");
+
+        let schema_catalog = SchemaCatalog::from_json_schemas(&json!({
+            "users": {
+                "type": "object",
+                "properties": {
+                    "_creationTime": {"type": "number"},
+                    "name": {"type": "string"}
+                }
+            },
+            "events": {
+                "type": "object",
+                "properties": {
+                    "_creationTime": {"type": "number"},
+                    "kind": {"type": "string"}
+                }
+            }
+        }));
+        schema_catalog.write_snapshot(&raw).unwrap();
+
+        write_change_events_batch(
+            &raw,
+            &Checkpoint::initial_snapshot(100, "cursor-1".to_string()),
+            &[ChangeEvent {
+                component_path: "".to_string(),
+                table_name: "users".to_string(),
+                document_id: "users:1".to_string(),
+                timestamp: 10,
+                op: ChangeOperation::Upsert,
+                schema_fingerprint: Some("abc".to_string()),
+                document: Some(json!({"name":"Ada"})),
+            }],
+        )
+        .unwrap();
+
+        let full = StagingMaterializer::materialize(&MaterializeStagingOptions {
+            raw_change_log_dir: raw.clone(),
+            output_dir: output.clone(),
+            incremental: false,
+            state_path: Some(state_path.clone()),
+        })
+        .unwrap();
+        assert_eq!(full.mode, "full_rebuild");
+        assert_eq!(full.tables_materialized, 1);
+
+        write_change_events_batch(
+            &raw,
+            &Checkpoint::delta_tail(200),
+            &[ChangeEvent {
+                component_path: "workflow".to_string(),
+                table_name: "events".to_string(),
+                document_id: "events:1".to_string(),
+                timestamp: 20,
+                op: ChangeOperation::Upsert,
+                schema_fingerprint: Some("def".to_string()),
+                document: Some(json!({"kind":"queued"})),
+            }],
+        )
+        .unwrap();
+
+        let incremental = StagingMaterializer::materialize(&MaterializeStagingOptions {
+            raw_change_log_dir: raw.clone(),
+            output_dir: output.clone(),
+            incremental: true,
+            state_path: Some(state_path),
+        })
+        .unwrap();
+
+        assert_eq!(incremental.mode, "incremental");
+        assert_eq!(incremental.new_raw_files, 1);
+        assert_eq!(incremental.affected_tables, 1);
+        assert_eq!(incremental.tables_materialized, 1);
+
+        let users_path = output.join("_root").join("users.parquet");
+        let workflow_events = output.join("workflow").join("events.parquet");
+        assert!(users_path.exists());
         assert!(workflow_events.exists());
 
         let _ = fs::remove_dir_all(root);
