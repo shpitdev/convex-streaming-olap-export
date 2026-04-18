@@ -19,7 +19,7 @@ pub struct StagingRow {
     pub document: Value,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StagingColumnKind {
     Boolean,
     Int64,

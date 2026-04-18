@@ -219,6 +219,7 @@ fn classify_schema_union(branches: &[Value]) -> Option<StagingColumnKind> {
         .iter()
         .filter_map(classify_schema_kind)
         .collect::<Vec<_>>();
+    kinds.sort();
     kinds.dedup();
     match kinds.as_slice() {
         [] => None,
@@ -247,6 +248,7 @@ fn classify_schema_type(schema_type: &Value) -> Option<StagingColumnKind> {
                 .iter()
                 .filter_map(classify_schema_type)
                 .collect::<Vec<_>>();
+            kinds.sort();
             kinds.dedup();
             match kinds.as_slice() {
                 [] => None,
