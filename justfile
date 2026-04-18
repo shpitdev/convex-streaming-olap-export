@@ -36,3 +36,6 @@ deltas *args:
 
 sync-once *args:
   cargo run --bin convex-export -- sync-once {{args}}
+
+materialize-staging *args:
+  cargo run --bin convex-export -- materialize-staging {{args}}

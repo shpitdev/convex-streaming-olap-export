@@ -11,6 +11,7 @@ use convex_streaming_olap_export::{
     errors::AppResult,
     model::schema::SchemaCatalog,
     sink::jsonl::{write_jsonl_stream, write_value},
+    staging::materialize::{MaterializeStagingOptions, StagingMaterializer},
     state::checkpoint_store::FileCheckpointStore,
     sync::{
         delta_sync::{fetch_delta_events, DeltaSyncOptions},
@@ -46,6 +47,7 @@ enum Command {
     Snapshot(SnapshotArgs),
     Deltas(DeltasArgs),
     SyncOnce(SyncOnceArgs),
+    MaterializeStaging(MaterializeStagingArgs),
 }
 
 #[derive(Debug, Args)]
@@ -116,11 +118,20 @@ struct DeltasArgs {
 
 #[derive(Debug, Args)]
 struct SyncOnceArgs {
-    #[arg(long, default_value = ".memory/raw_change_log.jsonl")]
+    #[arg(long, default_value = ".memory/raw_change_log")]
     output: PathBuf,
 
     #[arg(long, default_value = ".memory/raw_change_log.checkpoint.json")]
     checkpoint_path: PathBuf,
+}
+
+#[derive(Debug, Args)]
+struct MaterializeStagingArgs {
+    #[arg(long, default_value = ".memory/raw_change_log")]
+    raw_change_log: PathBuf,
+
+    #[arg(long, default_value = ".memory/staging")]
+    output: PathBuf,
 }
 
 #[tokio::main]
@@ -140,6 +151,7 @@ async fn main() -> AppResult<()> {
         Command::Snapshot(args) => handle_snapshot(&client, args).await?,
         Command::Deltas(args) => handle_deltas(&client, args).await?,
         Command::SyncOnce(args) => handle_sync_once(&client, args).await?,
+        Command::MaterializeStaging(args) => handle_materialize_staging(args).await?,
     }
 
     Ok(())
@@ -258,6 +270,19 @@ async fn handle_sync_once(client: &ConvexClient, args: SyncOnceArgs) -> AppResul
             },
         )
         .await?;
+
+    let stdout = io::stdout();
+    let mut writer = BufWriter::new(stdout.lock());
+    write_value(&mut writer, &summary, OutputFormat::Json)?;
+    writer.flush()?;
+    Ok(())
+}
+
+async fn handle_materialize_staging(args: MaterializeStagingArgs) -> AppResult<()> {
+    let summary = StagingMaterializer::materialize(&MaterializeStagingOptions {
+        raw_change_log_dir: args.raw_change_log,
+        output_dir: args.output,
+    })?;
 
     let stdout = io::stdout();
     let mut writer = BufWriter::new(stdout.lock());

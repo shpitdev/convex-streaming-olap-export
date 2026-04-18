@@ -29,4 +29,11 @@ impl Checkpoint {
             sync_state: SyncState::DeltaTail { cursor },
         }
     }
+
+    pub fn phase_name(&self) -> &'static str {
+        match self.sync_state {
+            SyncState::InitialSnapshot { .. } => "initial_snapshot",
+            SyncState::DeltaTail { .. } => "delta_tail",
+        }
+    }
 }

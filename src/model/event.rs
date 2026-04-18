@@ -10,6 +10,15 @@ pub enum ChangeOperation {
     Delete,
 }
 
+impl ChangeOperation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Upsert => "upsert",
+            Self::Delete => "delete",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeEvent {
     pub component_path: String,
