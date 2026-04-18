@@ -198,10 +198,10 @@ impl StagingMaterializer {
             .collect();
 
         let all_events = read_change_events_files(&all_paths)?;
+        let events_read = all_events.len();
         let current_state = fold_current_state(all_events);
         let schema_catalog = SchemaCatalog::read_snapshot(&options.raw_change_log_dir).ok();
         let files_read = all_paths.len();
-        let events_read = new_events.len() + current_state.len();
 
         let mut rows_materialized = 0usize;
         for projection in &affected {
@@ -691,6 +691,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(incremental.mode, "incremental");
+        assert_eq!(incremental.files_read, 2);
+        assert_eq!(incremental.events_read, 2);
         assert_eq!(incremental.new_raw_files, 1);
         assert_eq!(incremental.affected_tables, 1);
         assert_eq!(incremental.tables_materialized, 1);
