@@ -334,7 +334,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use arrow_array::{Float64Array, StringArray};
+    use arrow_array::{Array, Float64Array, StringArray};
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use serde_json::json;
 
@@ -455,7 +455,6 @@ mod tests {
             .downcast_ref::<StringArray>()
             .unwrap();
         assert!(meta.value(0).contains("\"tier\":\"pro\""));
-
         let workflow_events = output.join("workflow").join("events.parquet");
         assert!(workflow_events.exists());
 

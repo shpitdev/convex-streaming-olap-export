@@ -265,9 +265,9 @@ impl DynamicBuilder {
                 None => builder.append_null(),
             },
             Self::Utf8(builder) => match value {
+                Some(Value::Null) | None => builder.append_null(),
                 Some(Value::String(value)) => builder.append_value(value),
                 Some(other) => builder.append_value(document_json(other)?),
-                None => builder.append_null(),
             },
         }
         Ok(())
@@ -402,7 +402,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use arrow_array::StringArray;
+    use arrow_array::{Array, StringArray};
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use serde_json::json;
 
@@ -515,17 +515,23 @@ mod tests {
             component_path: "".to_string(),
             table_name: "users".to_string(),
         };
-        let columns = vec![StagingColumnProjection {
-            name: "name".to_string(),
-            kind: StagingColumnKind::Utf8,
-        }];
+        let columns = vec![
+            StagingColumnProjection {
+                name: "name".to_string(),
+                kind: StagingColumnKind::Utf8,
+            },
+            StagingColumnProjection {
+                name: "nickname".to_string(),
+                kind: StagingColumnKind::Utf8,
+            },
+        ];
         let rows = vec![StagingRow {
             component_path: "".to_string(),
             table_name: "users".to_string(),
             document_id: "users:1".to_string(),
             timestamp: 42,
             schema_fingerprint: Some("abc".to_string()),
-            document: json!({"name":"Ada"}),
+            document: json!({"name":"Ada","nickname":null}),
         }];
 
         let path = write_staging_table(&output_dir, &projection, &rows, &columns)
@@ -539,6 +545,13 @@ mod tests {
             .unwrap();
         let batches: Vec<_> = reader.map(|batch| batch.unwrap()).collect();
         assert_eq!(batches[0].num_rows(), 1);
+        let nickname_index = batches[0].schema().index_of("nickname").unwrap();
+        let nickname = batches[0]
+            .column(nickname_index)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert!(nickname.is_null(0));
 
         let _ = fs::remove_file(path);
         let _ = fs::remove_dir(output_dir.join("_root"));
