@@ -33,12 +33,21 @@ Outcome:
 
 ## Milestone 03
 
-Add destination-specific loading and packaging.
+Publish real `staging` table files to S3.
+
+Outcome:
+
+- versioned S3 publishes plus a latest manifest
+- stable S3 parquet table files for downstream readers
+- incremental publish by changed table file, with full rebuild still allowed
+
+## Milestone 04
+
+Add destination-specific readers and loaders on top of the S3 contract.
 
 Examples:
 
 - Databricks ingestion from `staging`
 - Palantir compute-module packaging
-- optional Fivetran-compatible runtime wrapper
 
-The intent is to keep these as adapters around the core exporter, not as the exporter itself.
+The intent is to keep these as adapters around the S3-backed exporter contract, not as the exporter itself.

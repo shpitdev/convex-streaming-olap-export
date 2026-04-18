@@ -2,6 +2,8 @@ pub mod config;
 pub mod convex;
 pub mod errors;
 pub mod model;
+pub mod publish;
+pub mod service;
 pub mod sink;
 pub mod staging;
 pub mod state;

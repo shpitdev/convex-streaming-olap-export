@@ -242,7 +242,7 @@ For v0, assume Convex `_id` is the stable identity. If identity semantics change
 These should stay out of the first slice:
 
 - `marts`
-- Fivetran-compatible gRPC wrapper
+- S3-backed warehouse-specific loaders
 - Databricks loader
 - object-store sink manager
 - Palantir compute-module packaging
