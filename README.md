@@ -138,10 +138,8 @@ Local:
 
 Remote:
 
-- `.github/workflows/ci.yml` is the baseline GitHub workflow
-- `.depot/workflows/ci.yml` is the preferred Depot CI workflow
-
-During rollout, keep both until the Depot path is fully trusted.
+- `.depot/workflows/ci.yml` is the single fmt/clippy/test CI workflow
+- CodeQL remains separate from the main quality gate
 
 ## References
 

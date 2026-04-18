@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeSet, HashMap},
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use serde::Serialize;
@@ -13,10 +13,7 @@ use crate::{
         event::{ChangeEvent, ChangeOperation},
         schema::SchemaCatalog,
     },
-    sink::parquet::{
-        list_change_event_batch_paths, read_change_events_dir, read_change_events_files,
-        write_staging_table,
-    },
+    sink::parquet::{list_change_event_batch_paths, read_change_events_files, write_staging_table},
     staging::project::{StagingColumnKind, StagingColumnProjection, StagingProjection, StagingRow},
     staging::state::{schema_snapshot_hash, FileStagingStateStore, StagingState},
 };
@@ -63,8 +60,9 @@ impl StagingMaterializer {
             }
         }
 
-        let events = read_change_events_dir(&options.raw_change_log_dir)?;
-        let files_read = parquet_file_count(&options.raw_change_log_dir)?;
+        let all_paths = list_change_event_batch_paths(&options.raw_change_log_dir)?;
+        let files_read = all_paths.len();
+        let events = read_change_events_files(&all_paths)?;
         let events_read = events.len();
         let new_raw_files = files_read;
         let schema_catalog = SchemaCatalog::read_snapshot(&options.raw_change_log_dir).ok();
@@ -126,7 +124,7 @@ impl StagingMaterializer {
             write_staging_table(&options.output_dir, &projection, &rows, &columns)?;
         }
 
-        let processed_raw_files = list_change_event_batch_paths(&options.raw_change_log_dir)?
+        let processed_raw_files = all_paths
             .into_iter()
             .filter_map(|path| {
                 path.file_name()
@@ -285,13 +283,6 @@ fn fold_current_state(events: Vec<ChangeEvent>) -> HashMap<(String, String, Stri
         }
     }
     latest
-}
-
-fn parquet_file_count(dir: &Path) -> AppResult<usize> {
-    Ok(fs::read_dir(dir)?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.extension().is_some_and(|ext| ext == "parquet"))
-        .count())
 }
 
 fn infer_staging_columns(
