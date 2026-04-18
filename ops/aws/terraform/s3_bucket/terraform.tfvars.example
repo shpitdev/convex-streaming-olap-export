@@ -1,5 +1,5 @@
 aws_region  = "us-east-1"
-bucket_name = "shpitdev-convex-streaming-olap-export-628031635965"
+bucket_name = "example-convex-streaming-olap-export-bucket"
 
 tags = {
   Environment = "prod"
