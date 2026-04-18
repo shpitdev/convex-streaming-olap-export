@@ -100,10 +100,6 @@ pub async fn publish_staging_to_s3(options: &PublishS3Options) -> AppResult<Publ
         tables,
     );
 
-    for key in &plan.delete_current_keys {
-        delete_object_if_exists(&client, &options.bucket, key).await?;
-    }
-
     for table in &plan.uploads {
         let versioned_key = versioned_table_key(&prefix, &publish_id, &table.relative_path);
         let current_key = current_table_key(&prefix, &table.relative_path);
@@ -132,6 +128,10 @@ pub async fn publish_staging_to_s3(options: &PublishS3Options) -> AppResult<Publ
         &serde_json::to_vec_pretty(&plan.manifest)?,
     )
     .await?;
+
+    for key in &plan.delete_current_keys {
+        delete_object_if_exists(&client, &options.bucket, key).await?;
+    }
 
     Ok(PublishS3Summary {
         bucket: options.bucket.clone(),
