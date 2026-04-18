@@ -48,15 +48,9 @@ pub async fn run_service(client: &ConvexClient, options: &RunOptions) -> AppResu
     validate_run_options(options)?;
 
     let mut iterations_completed = 0usize;
-    let mut last_iteration: Option<RunIterationSummary>;
+    let mut last_iteration: Option<RunIterationSummary> = None;
 
     loop {
-        let iteration = iterations_completed + 1;
-        let iteration_summary = run_iteration(client, options, iteration).await?;
-        log_iteration(&iteration_summary);
-        last_iteration = Some(iteration_summary);
-        iterations_completed = iteration;
-
         if options
             .max_iterations
             .is_some_and(|max_iterations| iterations_completed >= max_iterations)
@@ -67,6 +61,12 @@ pub async fn run_service(client: &ConvexClient, options: &RunOptions) -> AppResu
                 last_iteration,
             });
         }
+
+        let iteration = iterations_completed + 1;
+        let iteration_summary = run_iteration(client, options, iteration).await?;
+        log_iteration(&iteration_summary);
+        last_iteration = Some(iteration_summary);
+        iterations_completed = iteration;
 
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
@@ -218,6 +218,26 @@ mod tests {
         options.max_iterations = Some(1);
 
         validate_run_options(&options).unwrap();
+    }
+
+    #[tokio::test]
+    async fn zero_max_iterations_returns_without_running() {
+        let mut options = sample_options();
+        options.max_iterations = Some(0);
+
+        let client = crate::convex::client::ConvexClient::new(
+            crate::config::ConvexConnectionConfig::new(
+                url::Url::parse("https://example.convex.cloud").unwrap(),
+                "prod:example|secret".to_string(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        let summary = super::run_service(&client, &options).await.unwrap();
+        assert_eq!(summary.iterations_completed, 0);
+        assert_eq!(summary.stop_reason, "max_iterations_reached");
+        assert!(summary.last_iteration.is_none());
     }
 
     #[test]
