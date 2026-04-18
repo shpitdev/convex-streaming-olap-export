@@ -125,6 +125,10 @@ and stores checkpoint state in `.memory/raw_change_log.checkpoint.json` by defau
 `materialize-staging` rebuilds source-conformed current-state Parquet tables under
 `.memory/staging/` from the Parquet `raw_change_log` dataset.
 
+Use `materialize-staging --incremental` to update only the tables affected by
+new raw Parquet batches, while keeping the full rebuild path available as the
+correctness fallback.
+
 ## Quality Gates
 
 Local:
