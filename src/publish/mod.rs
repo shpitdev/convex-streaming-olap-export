@@ -380,7 +380,7 @@ async fn delete_object_if_exists(client: &Client, bucket: &str, key: &str) -> Ap
 }
 
 fn is_missing_key(message: &str) -> bool {
-    message.contains("NoSuchKey") || message.contains("not found")
+    message.contains("NoSuchKey")
 }
 
 #[cfg(test)]
