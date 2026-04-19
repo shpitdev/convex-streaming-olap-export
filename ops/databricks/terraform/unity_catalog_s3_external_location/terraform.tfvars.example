@@ -1,0 +1,27 @@
+databricks_profile     = "DEFAULT"
+databricks_config_file = "~/.databrickscfg"
+
+aws_role_arn             = "arn:aws:iam::123456789012:role/example-convex-streaming-olap-export-databricks-prod-reader"
+storage_credential_name  = "example-aws-s3-convex-streaming-olap-export"
+external_location_name   = "example-s3-convex-streaming-olap-export"
+external_location_url    = "s3://example-convex-streaming-olap-export-bucket/prod/staging/current/"
+
+storage_credential_comment = "AWS S3 access for convex-streaming-olap-export"
+external_location_comment  = "AWS S3 external location for convex-streaming-olap-export"
+
+storage_credential_read_only = true
+external_location_read_only  = true
+
+# Set to false after the AWS IAM trust policy has been updated and validation
+# should succeed.
+skip_validation = true
+
+storage_credential_create_external_location_principals = [
+  "user@example.com",
+]
+
+external_location_read_files_principals = [
+  "user@example.com",
+]
+
+external_location_create_external_table_principals = []

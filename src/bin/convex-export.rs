@@ -10,6 +10,8 @@ use convex_streaming_olap_export::{
     convex::{client::ConvexClient, schemas::JsonSchemasQuery},
     errors::AppResult,
     model::schema::SchemaCatalog,
+    publish::{publish_staging_to_s3, PublishS3Options},
+    service::{run_service, RunOptions},
     sink::jsonl::{write_jsonl_stream, write_value},
     staging::materialize::{MaterializeStagingOptions, StagingMaterializer},
     state::checkpoint_store::FileCheckpointStore,
@@ -35,10 +37,10 @@ struct Cli {
 #[derive(Debug, Args)]
 struct ConnectionArgs {
     #[arg(long, env = "CONVEX_DEPLOYMENT_URL", hide_env_values = true)]
-    deployment_url: Url,
+    deployment_url: Option<Url>,
 
     #[arg(long, env = "CONVEX_DEPLOY_KEY", hide_env_values = true)]
-    deploy_key: String,
+    deploy_key: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -48,6 +50,8 @@ enum Command {
     Deltas(DeltasArgs),
     SyncOnce(SyncOnceArgs),
     MaterializeStaging(MaterializeStagingArgs),
+    PublishS3(PublishS3Args),
+    Run(RunArgs),
 }
 
 #[derive(Debug, Args)]
@@ -140,6 +144,51 @@ struct MaterializeStagingArgs {
     state_path: Option<PathBuf>,
 }
 
+#[derive(Debug, Args)]
+struct PublishS3Args {
+    #[arg(long, default_value = ".memory/staging")]
+    staging_dir: PathBuf,
+
+    #[arg(long)]
+    bucket: String,
+
+    #[arg(long)]
+    prefix: Option<String>,
+
+    #[arg(long, env = "AWS_REGION")]
+    region: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct RunArgs {
+    #[arg(long, default_value = ".memory/raw_change_log")]
+    output: PathBuf,
+
+    #[arg(long, default_value = ".memory/raw_change_log.checkpoint.json")]
+    checkpoint_path: PathBuf,
+
+    #[arg(long, default_value = ".memory/staging")]
+    staging_dir: PathBuf,
+
+    #[arg(long)]
+    staging_state_path: Option<PathBuf>,
+
+    #[arg(long)]
+    bucket: String,
+
+    #[arg(long)]
+    prefix: Option<String>,
+
+    #[arg(long, env = "AWS_REGION")]
+    region: Option<String>,
+
+    #[arg(long, default_value_t = 30)]
+    poll_interval_secs: u64,
+
+    #[arg(long)]
+    max_iterations: Option<usize>,
+}
+
 #[tokio::main]
 async fn main() -> AppResult<()> {
     let _ = dotenvy::dotenv();
@@ -147,17 +196,15 @@ async fn main() -> AppResult<()> {
     metrics::install_noop();
 
     let cli = Cli::parse();
-    let client = ConvexClient::new(ConvexConnectionConfig::new(
-        cli.connection.deployment_url,
-        cli.connection.deploy_key,
-    )?)?;
 
     match cli.command {
-        Command::Schemas(args) => handle_schemas(&client, args).await?,
-        Command::Snapshot(args) => handle_snapshot(&client, args).await?,
-        Command::Deltas(args) => handle_deltas(&client, args).await?,
-        Command::SyncOnce(args) => handle_sync_once(&client, args).await?,
+        Command::Schemas(args) => handle_schemas(&build_client(&cli.connection)?, args).await?,
+        Command::Snapshot(args) => handle_snapshot(&build_client(&cli.connection)?, args).await?,
+        Command::Deltas(args) => handle_deltas(&build_client(&cli.connection)?, args).await?,
+        Command::SyncOnce(args) => handle_sync_once(&build_client(&cli.connection)?, args).await?,
         Command::MaterializeStaging(args) => handle_materialize_staging(args).await?,
+        Command::PublishS3(args) => handle_publish_s3(args).await?,
+        Command::Run(args) => handle_run(&build_client(&cli.connection)?, args).await?,
     }
 
     Ok(())
@@ -299,11 +346,63 @@ async fn handle_materialize_staging(args: MaterializeStagingArgs) -> AppResult<(
     Ok(())
 }
 
+async fn handle_publish_s3(args: PublishS3Args) -> AppResult<()> {
+    let summary = publish_staging_to_s3(&PublishS3Options {
+        staging_dir: args.staging_dir,
+        bucket: args.bucket,
+        prefix: args.prefix,
+        region: args.region,
+    })
+    .await?;
+
+    let stdout = io::stdout();
+    let mut writer = BufWriter::new(stdout.lock());
+    write_value(&mut writer, &summary, OutputFormat::Json)?;
+    writer.flush()?;
+    Ok(())
+}
+
+async fn handle_run(client: &ConvexClient, args: RunArgs) -> AppResult<()> {
+    let summary = run_service(
+        client,
+        &RunOptions {
+            raw_change_log_path: args.output,
+            checkpoint_path: args.checkpoint_path,
+            staging_output_dir: args.staging_dir,
+            staging_state_path: args.staging_state_path,
+            publish_bucket: args.bucket,
+            publish_prefix: args.prefix,
+            publish_region: args.region,
+            poll_interval: std::time::Duration::from_secs(args.poll_interval_secs),
+            max_iterations: args.max_iterations,
+        },
+    )
+    .await?;
+
+    let stdout = io::stdout();
+    let mut writer = BufWriter::new(stdout.lock());
+    write_value(&mut writer, &summary, OutputFormat::Json)?;
+    writer.flush()?;
+    Ok(())
+}
+
 async fn load_schema_catalog(client: &ConvexClient) -> AppResult<SchemaCatalog> {
     let response = client
         .json_schemas(&JsonSchemasQuery { delta_schema: true })
         .await?;
     Ok(SchemaCatalog::from_json_schemas(&response.payload))
+}
+
+fn build_client(connection: &ConnectionArgs) -> AppResult<ConvexClient> {
+    let deployment_url = connection.deployment_url.clone().ok_or(
+        convex_streaming_olap_export::errors::AppError::MissingRequiredConfig(
+            "CONVEX_DEPLOYMENT_URL",
+        ),
+    )?;
+    let deploy_key = connection.deploy_key.clone().ok_or(
+        convex_streaming_olap_export::errors::AppError::MissingRequiredConfig("CONVEX_DEPLOY_KEY"),
+    )?;
+    ConvexClient::new(ConvexConnectionConfig::new(deployment_url, deploy_key)?)
 }
 
 fn resolve_page_limit(pagination: &PaginationArgs) -> usize {

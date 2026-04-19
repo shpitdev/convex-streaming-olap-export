@@ -1,0 +1,10 @@
+aws_region  = "us-east-1"
+bucket_name = "example-convex-streaming-olap-export-bucket"
+
+allowed_prefixes = [
+  "*",
+]
+
+group_name  = "example-convex-streaming-olap-export-s3-publishers"
+policy_name = "example-convex-streaming-olap-export-s3-publish"
+user_name   = "example-convex-streaming-olap-export-publisher"

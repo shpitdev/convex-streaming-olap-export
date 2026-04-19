@@ -1,5 +1,10 @@
 # convex-streaming-olap-export
 
+Language: ![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
+Source/API: ![Convex](https://img.shields.io/badge/Convex-EE342F?logo=convex&logoColor=white)
+Data/Storage: ![Apache Arrow](https://img.shields.io/badge/Apache%20Arrow-4B5563) ![Parquet](https://img.shields.io/badge/Parquet-1F2937) ![Amazon S3](https://img.shields.io/badge/Amazon%20S3-569A31?logo=amazons3&logoColor=white)
+Platforms/IaC: ![Databricks](https://img.shields.io/badge/Databricks-FF3621?logo=databricks&logoColor=white) ![Terraform](https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white)
+
 Independent Convex-to-OLAP export with a Parquet-first sink.
 
 The intent is to stay behaviorally close to Convex's existing streaming export model and the upstream `fivetran_source` connector, while remaining fully independent of Fivetran as a runtime and product dependency.
@@ -113,10 +118,14 @@ Then run commands like:
 - `cargo run --bin convex-export -- deltas --cursor 0`
 - `cargo run --bin convex-export -- sync-once`
 - `cargo run --bin convex-export -- materialize-staging`
+- `cargo run --bin convex-export -- publish-s3 --bucket your-bucket`
+- `cargo run --bin convex-export -- run --bucket your-bucket`
 - `just verify`
 - `just install-hooks`
 - `just sync-once`
 - `just materialize-staging`
+- `just publish-s3 --bucket your-bucket`
+- `just run --bucket your-bucket`
 - `just depot-ci --job fmt`
 
 `sync-once` writes deterministic Parquet batch files under `.memory/raw_change_log/`
@@ -128,6 +137,49 @@ and stores checkpoint state in `.memory/raw_change_log.checkpoint.json` by defau
 Use `materialize-staging --incremental` to update only the tables affected by
 new raw Parquet batches, while keeping the full rebuild path available as the
 correctness fallback.
+
+`publish-s3` uploads those local `staging` parquet files to S3 with:
+
+- stable `staging/current/...` table paths
+- versioned `staging/versions/<publish_id>/...` snapshots
+- `staging/manifests/latest.json` as the publish pointer
+
+`run` is the maintained long-running service mode. Each loop does:
+
+1. `sync-once`
+2. `materialize-staging --incremental`
+3. `publish-s3` if the staging step produced a real change
+
+Use `--poll-interval-secs` to control the sleep between loops. For bounded smoke
+tests, `--max-iterations 1` runs one full cycle and exits.
+
+AWS bootstrap templates live under `ops/aws/`. Snapshot them into `.memory/`
+before running Terraform or emitting access keys:
+
+- `just aws-template-snapshot`
+
+Databricks bootstrap templates live under `ops/databricks/`. Snapshot them into
+`.memory/` before running Terraform:
+
+- `just databricks-template-snapshot`
+
+Databricks landing sync lives in `ops/databricks/sql/` plus `scripts/` and is
+intentionally kept outside Terraform. It uses the published S3 manifest to
+create a schema of stable views over `staging/current/...` parquet files:
+
+- `just databricks-sync-staging-views --warehouse-id <warehouse-id> --bucket <bucket> --prefix <prefix>`
+
+Defaults:
+
+- catalog: `workspace`
+- schema: `convex_streaming_olap_export`
+- profile: `DEFAULT`
+
+The sync renders SQL and statement results into `.memory/databricks-view-sync/`
+before applying them.
+
+VS Code recommendations live in `.vscode/extensions.json`, limited to Rust and
+Terraform.
 
 ## Quality Gates
 

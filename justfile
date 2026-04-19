@@ -39,3 +39,18 @@ sync-once *args:
 
 materialize-staging *args:
   cargo run --bin convex-export -- materialize-staging {{args}}
+
+publish-s3 *args:
+  cargo run --bin convex-export -- publish-s3 {{args}}
+
+run *args:
+  cargo run --bin convex-export -- run {{args}}
+
+aws-template-snapshot label="templates":
+  ./scripts/snapshot-aws-templates.sh {{label}}
+
+databricks-template-snapshot label="templates":
+  ./scripts/snapshot-databricks-templates.sh {{label}}
+
+databricks-sync-staging-views *args:
+  ./scripts/sync-databricks-staging-views.sh {{args}}

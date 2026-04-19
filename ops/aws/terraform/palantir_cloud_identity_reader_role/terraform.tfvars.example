@@ -1,0 +1,5 @@
+aws_region                     = "us-east-1"
+bucket_name                    = "example-convex-streaming-olap-export-bucket"
+current_prefix                 = "prod/staging/current"
+role_name                      = "example-convex-streaming-olap-export-palantir-prod-reader"
+palantir_cloud_identity_role_arn = "arn:aws:iam::123456789012:role/foundry-cloud-identity-example"

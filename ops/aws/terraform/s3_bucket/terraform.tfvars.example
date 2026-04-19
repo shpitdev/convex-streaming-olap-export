@@ -1,0 +1,6 @@
+aws_region  = "us-east-1"
+bucket_name = "example-convex-streaming-olap-export-bucket"
+
+tags = {
+  Environment = "prod"
+}

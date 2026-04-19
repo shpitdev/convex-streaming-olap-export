@@ -1,0 +1,6 @@
+{
+    "recommendations": [
+        "hashicorp.terraform",
+        "rust-lang.rust-analyzer"
+    ]
+}

@@ -30,12 +30,20 @@ pub enum AppError {
     InvalidFieldType(&'static str),
     #[error("invalid page limit {0}; expected at least 1")]
     InvalidPageLimit(usize),
+    #[error("invalid run poll interval {0}; use a positive interval for long-running mode")]
+    InvalidRunPollInterval(u64),
     #[error("snapshot page indicated more data but did not return a cursor")]
     MissingSnapshotCursor,
     #[error("unsupported checkpoint version {0}")]
     UnsupportedCheckpointVersion(i64),
     #[error("invalid parquet schema: {0}")]
     InvalidParquetSchema(String),
+    #[error("missing required configuration `{0}`")]
+    MissingRequiredConfig(&'static str),
+    #[error("invalid staging path: {0}")]
+    InvalidStagingPath(String),
+    #[error("aws s3 operation failed: {0}")]
+    S3(String),
     #[error("failed to initialize telemetry: {0}")]
     TelemetryInit(String),
 }
