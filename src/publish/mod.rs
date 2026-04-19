@@ -146,6 +146,34 @@ pub async fn publish_staging_to_s3(options: &PublishS3Options) -> AppResult<Publ
     })
 }
 
+pub async fn staging_needs_publish(options: &PublishS3Options) -> AppResult<bool> {
+    let prefix = normalize_prefix(options.prefix.as_deref());
+    let tables = collect_local_staging_tables(&options.staging_dir)?;
+    let region_provider = match options.region.as_deref() {
+        Some(region) => RegionProviderChain::first_try(Region::new(region.to_string())),
+        None => RegionProviderChain::default_provider(),
+    };
+    let config = aws_config::defaults(BehaviorVersion::latest())
+        .region(region_provider)
+        .load()
+        .await;
+    let client = Client::new(&config);
+
+    let latest_manifest_key = latest_manifest_key(&prefix);
+    let previous_manifest =
+        load_manifest_if_present(&client, &options.bucket, &latest_manifest_key).await?;
+    let plan = build_publish_plan(
+        previous_manifest.as_ref(),
+        &options.bucket,
+        &prefix,
+        "noop",
+        0,
+        tables,
+    );
+
+    Ok(plan_requires_publish(&plan))
+}
+
 fn build_publish_plan(
     previous_manifest: Option<&StagingPublishManifest>,
     bucket: &str,
@@ -212,6 +240,10 @@ fn build_publish_plan(
         delete_current_keys,
         unchanged,
     }
+}
+
+fn plan_requires_publish(plan: &PublishPlan) -> bool {
+    !plan.uploads.is_empty() || !plan.delete_current_keys.is_empty()
 }
 
 fn collect_local_staging_tables(staging_dir: &Path) -> AppResult<Vec<LocalStagingTable>> {
@@ -394,8 +426,8 @@ mod tests {
 
     use super::{
         build_publish_plan, collect_local_staging_tables, current_table_key, manifest_key,
-        normalize_prefix, versioned_table_key, LocalStagingTable, PublishedStagingTable,
-        StagingPublishManifest,
+        normalize_prefix, plan_requires_publish, versioned_table_key, LocalStagingTable,
+        PublishedStagingTable, StagingPublishManifest,
     };
 
     #[test]
@@ -462,6 +494,62 @@ mod tests {
         assert!(plan.manifest.tables.contains_key("_root/jobs.parquet"));
         assert!(plan.manifest.tables.contains_key("workflow/steps.parquet"));
         assert!(!plan.manifest.tables.contains_key("workflow/events.parquet"));
+    }
+
+    #[test]
+    fn publish_plan_requires_work_when_manifest_is_missing_or_stale() {
+        let plan = build_publish_plan(
+            None,
+            "bucket",
+            "exports",
+            "200",
+            200,
+            vec![LocalStagingTable {
+                relative_path: "_root/jobs.parquet".to_string(),
+                absolute_path: PathBuf::from("/tmp/_root/jobs.parquet"),
+                sha256: "same".to_string(),
+                bytes: 10,
+            }],
+        );
+
+        assert!(plan_requires_publish(&plan));
+    }
+
+    #[test]
+    fn publish_plan_does_not_require_work_when_manifest_matches_local_state() {
+        let previous = StagingPublishManifest {
+            version: 1,
+            publish_id: "100".to_string(),
+            published_at_epoch_ms: 100,
+            bucket: "bucket".to_string(),
+            prefix: "exports".to_string(),
+            tables: BTreeMap::from([(
+                "_root/jobs.parquet".to_string(),
+                PublishedStagingTable {
+                    relative_path: "_root/jobs.parquet".to_string(),
+                    current_key: current_table_key("exports", "_root/jobs.parquet"),
+                    versioned_key: versioned_table_key("exports", "100", "_root/jobs.parquet"),
+                    sha256: "same".to_string(),
+                    bytes: 10,
+                },
+            )]),
+        };
+
+        let plan = build_publish_plan(
+            Some(&previous),
+            "bucket",
+            "exports",
+            "200",
+            200,
+            vec![LocalStagingTable {
+                relative_path: "_root/jobs.parquet".to_string(),
+                absolute_path: PathBuf::from("/tmp/_root/jobs.parquet"),
+                sha256: "same".to_string(),
+                bytes: 10,
+            }],
+        );
+
+        assert!(!plan_requires_publish(&plan));
     }
 
     #[test]

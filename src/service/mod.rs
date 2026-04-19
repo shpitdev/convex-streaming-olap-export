@@ -8,7 +8,7 @@ use crate::{
     convex::{client::ConvexClient, schemas::JsonSchemasQuery},
     errors::{AppError, AppResult},
     model::schema::SchemaCatalog,
-    publish::{publish_staging_to_s3, PublishS3Options, PublishS3Summary},
+    publish::{publish_staging_to_s3, staging_needs_publish, PublishS3Options, PublishS3Summary},
     staging::materialize::{
         MaterializeStagingOptions, MaterializeStagingSummary, StagingMaterializer,
     },
@@ -109,16 +109,14 @@ async fn run_iteration(
         incremental: true,
         state_path: options.staging_state_path.clone(),
     })?;
-    let publish = if should_publish(&staging) {
-        Some(
-            publish_staging_to_s3(&PublishS3Options {
-                staging_dir: options.staging_output_dir.clone(),
-                bucket: options.publish_bucket.clone(),
-                prefix: options.publish_prefix.clone(),
-                region: options.publish_region.clone(),
-            })
-            .await?,
-        )
+    let publish_options = PublishS3Options {
+        staging_dir: options.staging_output_dir.clone(),
+        bucket: options.publish_bucket.clone(),
+        prefix: options.publish_prefix.clone(),
+        region: options.publish_region.clone(),
+    };
+    let publish = if should_publish(&staging) || staging_needs_publish(&publish_options).await? {
+        Some(publish_staging_to_s3(&publish_options).await?)
     } else {
         None
     };
