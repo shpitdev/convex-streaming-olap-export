@@ -277,15 +277,22 @@ install_dev_link() {
 }
 
 install_release_binary() {
-  local version os arch asset temp_dir binary_path target_dir install_path installed_version
+  local version os arch asset temp_dir binary_path target_dir install_path installed_version link_path
   os="$(detect_os)"
   arch="$(detect_arch)"
   validate_release_platform "$os" "$arch"
+  link_path="${BIN_DIR}/${BINARY_NAME}"
+
+  if [[ -e "$link_path" && "$FORCE" != "true" ]]; then
+    printf 'existing installation: %s\nUse --force to replace.\n' "$link_path" >&2
+    exit 1
+  fi
+
   version="$(resolve_release_version)"
   asset="${BINARY_NAME}_${version}_${os}_${arch}.tar.gz"
 
   temp_dir="$(mktemp -d)"
-  trap 'rm -rf "$temp_dir"' EXIT
+  trap "rm -rf -- '$temp_dir'" EXIT
   download_release "$version" "$asset" "$temp_dir"
   tar -xzf "${temp_dir}/${asset}" -C "$temp_dir"
 
@@ -298,19 +305,15 @@ install_release_binary() {
   cp "$binary_path" "$install_path"
   chmod 0755 "$install_path"
 
-  if [[ -e "${BIN_DIR}/${BINARY_NAME}" && "$FORCE" != "true" ]]; then
-    printf 'existing installation: %s\nUse --force to replace.\n' "${BIN_DIR}/${BINARY_NAME}" >&2
-    exit 1
-  fi
-  rm -f "${BIN_DIR}/${BINARY_NAME}"
-  ln -s "$install_path" "${BIN_DIR}/${BINARY_NAME}"
+  rm -f "$link_path"
+  ln -s "$install_path" "$link_path"
 
   ensure_shell_path
 
-  installed_version="$("${BIN_DIR}/${BINARY_NAME}" --version 2>/dev/null || true)"
-  printf 'Installed %s to %s\n' "$BINARY_NAME" "${BIN_DIR}/${BINARY_NAME}"
+  installed_version="$("$link_path" --version 2>/dev/null || true)"
+  printf 'Installed %s to %s\n' "$BINARY_NAME" "$link_path"
   printf 'Version: %s\n' "${installed_version:-unknown}"
-  verify_path_resolution "$BINARY_NAME" "${BIN_DIR}/${BINARY_NAME}"
+  verify_path_resolution "$BINARY_NAME" "$link_path"
 }
 
 mode="$(resolve_install_mode)"
