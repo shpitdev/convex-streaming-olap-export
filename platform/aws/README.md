@@ -2,6 +2,18 @@
 
 AWS assets grouped by the target or consumer they serve.
 
+```mermaid
+flowchart LR
+  Pub[S3 target assets]
+  S3[S3 bucket + publisher user]
+  Consumers[S3 consumer access]
+  DB[Databricks reader role]
+  Pal[Palantir reader roles]
+  Pub --> S3
+  Consumers --> DB
+  Consumers --> Pal
+```
+
 ## Layout
 
 - `s3_target/terraform/s3_bucket/`: bucket, versioning, block-public-access, SSE-S3

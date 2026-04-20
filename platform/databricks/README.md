@@ -6,6 +6,15 @@ Databricks assets grouped by target family:
 - `native/`: Databricks-first assets where Convex changes land directly in
   Unity Catalog Delta tables
 
+```mermaid
+flowchart LR
+  S3[S3-backed path]
+  Native[Databricks-native path]
+  S3 --> Views[Unity Catalog views over S3 parquet]
+  Native --> Bronze[bronze CDC Delta]
+  Native --> Silver[silver current-state Delta]
+```
+
 Use these assets the same way as the AWS templates:
 
 1. Snapshot them into `.memory/`.
@@ -31,6 +40,8 @@ The S3-backed landing sync now performs a preflight check against Unity Catalog
 external locations. The published `staging/current` root must be covered by an
 external location before `read_files(...)` views are applied.
 
+Read more: [`platform/databricks/s3/README.md`](s3/README.md)
+
 ## `native/`
 
 The Databricks-first assets are the starting point for direct Delta landing.
@@ -43,3 +54,5 @@ The Databricks-first assets are the starting point for direct Delta landing.
 
 The provider is configured from `~/.databrickscfg` by default, typically using
 the `DEFAULT` profile.
+
+Read more: [`platform/databricks/native/README.md`](native/README.md)
