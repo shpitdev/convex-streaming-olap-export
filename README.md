@@ -23,12 +23,14 @@ extraction model:
 ```mermaid
 flowchart TD
   Root[convex-streaming-olap-export]
+  Inspect[apps/convex-inspect]
   CLI[apps/convex-sync]
   Core[crates/convex-sync-core]
   S3[crates/convex-export-s3]
   AWS[platform/aws]
   DBS3[platform/databricks/s3]
   DBN[platform/databricks/native]
+  Root --> Inspect
   Root --> CLI
   Root --> Core
   Root --> S3
@@ -39,6 +41,7 @@ flowchart TD
 
 Read the repo by layer:
 
+- [`apps/convex-inspect/README.md`](apps/convex-inspect/README.md): direct source inspection commands
 - [`apps/convex-sync/README.md`](apps/convex-sync/README.md): CLI surface and S3/export runtime commands
 - `crates/convex-sync-core/`: shared Convex client, checkpoint FSM, event normalization, sync engine
 - `crates/convex-export-s3/`: raw parquet sink, staging materialization, S3 publish flow
@@ -68,6 +71,12 @@ Current release coverage:
 - `convex-sync-dev` is checkout-linked and rebuilds incrementally via Cargo
 - release installs go to `~/.local/share/convex-sync/<version>/convex-sync`
 - command symlinks go in `~/.local/bin`
+- `convex-inspect` is repo-local today and not part of the release artifact
+
+## Operator Binaries
+
+- `convex-inspect`: inspect Convex schemas, snapshot pages, and delta pages directly
+- `convex-sync`: run the maintained parquet -> staging -> S3 export workflow
 
 ## Supported Variations
 
@@ -95,17 +104,23 @@ The maintained Rust runtime path:
 
 CLI:
 
-- `cargo run -p convex-sync -- schemas`
-- `cargo run -p convex-sync -- snapshot --table-name users`
-- `cargo run -p convex-sync -- deltas --cursor 0`
 - `cargo run -p convex-sync -- sync-once`
 - `cargo run -p convex-sync -- materialize-staging`
 - `cargo run -p convex-sync -- publish-s3 --bucket your-bucket`
 - `cargo run -p convex-sync -- run --bucket your-bucket`
 
+Inspection:
+
+- `cargo run -p convex-inspect -- schemas`
+- `cargo run -p convex-inspect -- snapshot --table-name users`
+- `cargo run -p convex-inspect -- deltas --cursor 0`
+
 Or via `just`:
 
 - `just dev-cli --help`
+- `just schemas`
+- `just snapshot --table-name users`
+- `just deltas --cursor 0`
 - `just sync-once`
 - `just materialize-staging`
 - `just publish-s3 --bucket your-bucket`

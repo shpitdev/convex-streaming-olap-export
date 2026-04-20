@@ -886,6 +886,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "convex-inspect"
+version = "0.0.2"
+dependencies = [
+ "clap",
+ "convex-sync-core",
+ "dotenvy",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "convex-sync"
 version = "0.0.2"
 dependencies = [

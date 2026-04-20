@@ -17,9 +17,6 @@ flowchart LR
 
 ## Commands
 
-- `schemas`: fetch Convex schema metadata
-- `snapshot`: inspect snapshot pages directly
-- `deltas`: inspect delta pages directly
 - `sync-once`: write append-only raw change-log parquet
 - `materialize-staging`: collapse raw changes into latest-state staging parquet
 - `publish-s3`: publish staging parquet to S3
@@ -31,6 +28,10 @@ flowchart LR
 cargo run -p convex-sync -- --help
 cargo run -p convex-sync -- sync-once --help
 ```
+
+Direct source inspection now lives in:
+
+- [`apps/convex-inspect/README.md`](../convex-inspect/README.md)
 
 Checkout-linked dev install:
 

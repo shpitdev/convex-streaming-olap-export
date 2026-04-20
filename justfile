@@ -6,6 +6,9 @@ install-hooks:
   git config --local core.hooksPath .githooks
   chmod +x .githooks/pre-commit
 
+build-inspect:
+  cargo build -p convex-inspect
+
 build-cli:
   cargo build -p convex-sync
 
@@ -38,13 +41,13 @@ dev-cli *args:
   ./scripts/convex-sync-dev {{args}}
 
 schemas *args:
-  cargo run -p convex-sync -- schemas {{args}}
+  cargo run -p convex-inspect -- schemas {{args}}
 
 snapshot *args:
-  cargo run -p convex-sync -- snapshot {{args}}
+  cargo run -p convex-inspect -- snapshot {{args}}
 
 deltas *args:
-  cargo run -p convex-sync -- deltas {{args}}
+  cargo run -p convex-inspect -- deltas {{args}}
 
 sync-once *args:
   cargo run -p convex-sync -- sync-once {{args}}

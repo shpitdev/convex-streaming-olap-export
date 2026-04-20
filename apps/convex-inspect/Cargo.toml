@@ -1,0 +1,17 @@
+[package]
+name = "convex-inspect"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version = "0.0.2"
+
+[[bin]]
+name = "convex-inspect"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+convex-sync-core = { path = "../../crates/convex-sync-core" }
+dotenvy.workspace = true
+tokio.workspace = true
+url.workspace = true
