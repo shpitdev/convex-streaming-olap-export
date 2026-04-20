@@ -866,45 +866,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "convex-cdc-core"
-version = "0.0.1"
-dependencies = [
- "arrow-schema",
- "clap",
- "hex",
- "parquet",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
-name = "convex-sync"
-version = "0.0.2"
-dependencies = [
- "clap",
- "convex-cdc-core",
- "convex-target-s3",
- "dotenvy",
- "tokio",
- "url",
-]
-
-[[package]]
-name = "convex-target-s3"
+name = "convex-export-s3"
 version = "0.0.1"
 dependencies = [
  "arrow-array",
  "arrow-schema",
  "aws-config",
  "aws-sdk-s3",
- "convex-cdc-core",
+ "convex-sync-core",
  "hex",
  "parquet",
  "serde",
@@ -914,6 +883,35 @@ dependencies = [
  "tracing",
  "url",
  "walkdir",
+]
+
+[[package]]
+name = "convex-sync"
+version = "0.0.2"
+dependencies = [
+ "clap",
+ "convex-export-s3",
+ "convex-sync-core",
+ "dotenvy",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "convex-sync-core"
+version = "0.0.1"
+dependencies = [
+ "clap",
+ "hex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

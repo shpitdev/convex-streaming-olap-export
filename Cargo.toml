@@ -1,8 +1,8 @@
 [workspace]
 members = [
   "apps/convex-sync",
-  "crates/convex-cdc-core",
-  "crates/convex-target-s3",
+  "crates/convex-sync-core",
+  "crates/convex-export-s3",
 ]
 resolver = "2"
 
