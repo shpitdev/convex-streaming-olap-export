@@ -172,7 +172,13 @@ Local:
 
 Remote:
 
-- `.depot/workflows/ci.yml` runs fmt/clippy/test
+- `.depot/workflows/ci.yml` runs:
+  - `Rustfmt`
+  - `Changed Paths`
+  - `Clippy / Inspect`
+  - `Test / Inspect`
+  - `Clippy / Sync`
+  - `Test / Sync`
 - `.depot/workflows/release.yml` creates stable release PRs and publishes CLI archives
 - `.depot/workflows/release-rc.yml` publishes numbered prerelease archives from `main`
 - `.github/workflows/semantic-pr.yml` enforces conventional PR titles so stable releases can be created automatically from merged PRs
