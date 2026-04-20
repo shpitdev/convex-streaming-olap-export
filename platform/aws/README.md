@@ -14,7 +14,7 @@ AWS assets grouped by the target or consumer they serve.
 `s3_consumers` assets are only needed when another platform reads those S3
 artifacts directly.
 
-## Working pattern
+## Working Pattern
 
 1. Snapshot these templates into `.memory/`.
 2. Edit the copied `.tfvars` file there.

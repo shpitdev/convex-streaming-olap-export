@@ -16,7 +16,7 @@ Recommended entrypoint: `just databricks-template-snapshot`
 
 ## `s3/`
 
-The S3-backed Databricks integration preserves the existing export workflow:
+The S3-backed Databricks integration preserves the existing export workflow.
 
 - `s3/terraform/unity_catalog_s3_external_location/`: storage credentials, external location, grants
 - `s3/sql/register_staging_views.sql.tmpl`: stable `VIEW`s over `staging/current/...` parquet files
@@ -33,7 +33,7 @@ external location before `read_files(...)` views are applied.
 
 ## `native/`
 
-The Databricks-first assets are the starting point for direct Delta landing:
+The Databricks-first assets are the starting point for direct Delta landing.
 
 - `native/extractor/`: a Databricks job entrypoint that mirrors the current
   Convex snapshot/delta checkpoint logic and writes bronze CDC tables
