@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source_dir="$repo_root/ops/databricks"
+source_dir="$repo_root/platform/databricks"
 label="${1:-templates}"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 dest_dir="$repo_root/.memory/databricks-template-snapshots/${timestamp}-${label}"
