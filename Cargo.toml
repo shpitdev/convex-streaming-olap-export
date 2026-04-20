@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "apps/convex-inspect",
   "apps/convex-sync",
   "crates/convex-sync-core",
   "crates/convex-export-s3",

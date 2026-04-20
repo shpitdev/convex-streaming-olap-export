@@ -19,6 +19,9 @@ The archive contains:
 For now, that is enough to make the maintained Rust runtime easy to install and
 verify.
 
+`convex-inspect` is intentionally excluded from release artifacts for now. It is
+a repo-local source-inspection binary, not the published operator entrypoint.
+
 ## Dev Install Surface
 
 This repo also ships a checkout-linked dev command:
