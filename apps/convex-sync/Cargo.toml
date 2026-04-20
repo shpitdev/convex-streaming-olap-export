@@ -3,7 +3,7 @@ name = "convex-sync"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-version = "0.0.1"
+version = "0.0.2"
 
 [[bin]]
 name = "convex-sync"
