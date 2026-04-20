@@ -42,7 +42,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              apps/convex-sync/*|crates/convex-export-s3/*|Cargo.toml|Cargo.lock|rust-toolchain.toml|rustfmt.toml|.depot/workflows/ci.yml)
+              apps/convex-sync/*|crates/convex-export-s3/*|crates/convex-sync-core/*|Cargo.toml|Cargo.lock|rust-toolchain.toml|rustfmt.toml|.depot/workflows/ci.yml)
                 sync=true
                 ;;
             esac
