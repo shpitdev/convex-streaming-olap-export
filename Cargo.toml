@@ -10,7 +10,7 @@ resolver = "2"
 edition = "2021"
 license = "MIT"
 publish = false
-version = "0.1.0"
+version = "0.0.1"
 
 [workspace.dependencies]
 arrow-array = "54.2.1"

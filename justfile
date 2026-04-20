@@ -6,6 +6,12 @@ install-hooks:
   git config --local core.hooksPath .githooks
   chmod +x .githooks/pre-commit
 
+build-cli:
+  cargo build -p convex-sync
+
+build-cli-release:
+  cargo build -p convex-sync --release --locked
+
 fmt:
   cargo fmt --all
 
@@ -28,6 +34,9 @@ depot-ci *args:
   depot ci run --workflow .depot/workflows/ci.yml {{args}}
 
 # S3/export CLI
+dev-cli *args:
+  ./scripts/convex-sync-dev {{args}}
+
 schemas *args:
   cargo run -p convex-sync -- schemas {{args}}
 
@@ -62,3 +71,7 @@ databricks-sync-staging-views *args:
 
 databricks-apply-sql-dir profile warehouse_id sql_dir:
   ./scripts/apply-databricks-sql-dir.sh {{profile}} {{warehouse_id}} {{sql_dir}}
+
+# Install
+install-dev:
+  ./install.sh --mode dev --force
