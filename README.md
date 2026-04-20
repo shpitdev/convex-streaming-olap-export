@@ -100,6 +100,7 @@ Remote:
 
 - [docs/architecture.md](docs/architecture.md)
 - [docs/public-reference-map.md](docs/public-reference-map.md)
+- [docs/release-artifacts.md](docs/release-artifacts.md)
 - [Convex streaming export docs](https://docs.convex.dev/production/integrations/streaming-import-export)
 - [Convex streaming export API](https://docs.convex.dev/streaming-export-api)
 - [Upstream Convex `fivetran_source` crate](https://github.com/get-convex/convex-backend/tree/main/crates/fivetran_source)
