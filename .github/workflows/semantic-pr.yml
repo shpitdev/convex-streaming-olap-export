@@ -1,4 +1,4 @@
-name: Semantic PR Title
+name: semantic-pr
 
 on:
   pull_request_target:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   semantic-pr:
-    name: semantic-pr/title
+    name: 01-title
     runs-on: ubuntu-24.04
     if: github.actor != 'dependabot[bot]'
     steps:
