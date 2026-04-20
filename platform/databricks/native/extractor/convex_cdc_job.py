@@ -23,6 +23,18 @@ from pyspark.sql.types import (
 
 spark = SparkSession.builder.getOrCreate()
 
+CDC_SOURCE_ID = "_cdc_source_id"
+CDC_SOURCE_COMPONENT = "_cdc_source_component"
+CDC_SOURCE_TABLE = "_cdc_source_table"
+CDC_DOCUMENT_ID = "_cdc_document_id"
+CDC_SEQUENCE_NUM = "_cdc_sequence_num"
+CDC_IS_DELETED = "_cdc_is_deleted"
+CDC_SCHEMA_FINGERPRINT = "_cdc_schema_fingerprint"
+CDC_RAW_DOCUMENT_JSON = "_cdc_raw_document_json"
+CDC_INGESTED_AT = "_cdc_ingested_at"
+CDC_RUN_ID = "_cdc_run_id"
+CDC_CREATION_TIME = "_cdc_creation_time"
+
 
 def env(name: str, default: Optional[str] = None) -> str:
     value = os.getenv(name, default)
@@ -289,20 +301,20 @@ def normalize_event(value: dict[str, Any], table_schema_fingerprint: Optional[st
     }
 
     event: dict[str, Any] = {
-        "source_id": source_id,
-        "source_component": value["_component"],
-        "source_table": value["_table"],
-        "document_id": value["_id"],
-        "sequence_num": int(value["_ts"]),
-        "is_deleted": is_deleted,
-        "schema_fingerprint": table_schema_fingerprint,
-        "raw_document_json": None if is_deleted else json.dumps(document, sort_keys=True, separators=(",", ":")),
-        "ingested_at": None,
-        "run_id": None,
+        CDC_SOURCE_ID: source_id,
+        CDC_SOURCE_COMPONENT: value["_component"],
+        CDC_SOURCE_TABLE: value["_table"],
+        CDC_DOCUMENT_ID: value["_id"],
+        CDC_SEQUENCE_NUM: int(value["_ts"]),
+        CDC_IS_DELETED: is_deleted,
+        CDC_SCHEMA_FINGERPRINT: table_schema_fingerprint,
+        CDC_RAW_DOCUMENT_JSON: None if is_deleted else json.dumps(document, sort_keys=True, separators=(",", ":")),
+        CDC_INGESTED_AT: None,
+        CDC_RUN_ID: None,
     }
 
     if "_creationTime" in document:
-        event["creation_time"] = document["_creationTime"]
+        event[CDC_CREATION_TIME] = document["_creationTime"]
 
     if not is_deleted:
         for key, field_value in document.items():
@@ -320,8 +332,8 @@ def append_events(table_name: str, rows: list[dict[str, Any]], run_id: str, bron
     bronze_table = qualify(catalog, bronze_schema_name, table_name)
     frame = (
         build_explicit_frame(rows)
-        .withColumn("ingested_at", F.current_timestamp())
-        .withColumn("run_id", F.lit(run_id))
+        .withColumn(CDC_INGESTED_AT, F.current_timestamp())
+        .withColumn(CDC_RUN_ID, F.lit(run_id))
     )
     (
         frame.write.format("delta")
@@ -372,6 +384,59 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def run_snapshot_until_delta(
+    client: ConvexClient,
+    *,
+    initial_snapshot: Optional[int],
+    initial_cursor: Optional[str],
+    table_name: Optional[str],
+    table_fingerprints: dict[str, str],
+    source_id: str,
+    run_id: str,
+    bronze_schema: str,
+    catalog: Optional[str],
+    control_table: str,
+    schema_hash: str,
+) -> Checkpoint:
+    snapshot = initial_snapshot
+    cursor = initial_cursor
+
+    while True:
+        response = client.list_snapshot(
+            snapshot=snapshot,
+            cursor=cursor,
+            table_name=table_name,
+        )
+        append_grouped_events(
+            response["values"],
+            table_fingerprints,
+            source_id,
+            run_id,
+            bronze_schema,
+            catalog,
+        )
+
+        if response["hasMore"]:
+            checkpoint = Checkpoint(
+                phase="initial_snapshot",
+                snapshot_ts=response["snapshot"],
+                snapshot_cursor=response["cursor"],
+                schema_hash=schema_hash,
+            )
+            save_checkpoint(source_id, control_table, checkpoint, run_id)
+            snapshot = response["snapshot"]
+            cursor = response["cursor"]
+            continue
+
+        checkpoint = Checkpoint(
+            phase="delta_tail",
+            delta_cursor=response["snapshot"],
+            schema_hash=schema_hash,
+        )
+        save_checkpoint(source_id, control_table, checkpoint, run_id)
+        return checkpoint
+
+
 def run_once() -> None:
     args = parse_args()
 
@@ -399,43 +464,33 @@ def run_once() -> None:
     checkpoint = load_checkpoint(source_id, control_table)
 
     if checkpoint is None:
-        snapshot: Optional[int] = None
-        cursor: Optional[str] = None
-
-        while True:
-            response = client.list_snapshot(
-                snapshot=snapshot,
-                cursor=cursor,
-                table_name=table_name,
-            )
-            append_grouped_events(
-                response["values"],
-                table_fingerprints,
-                source_id,
-                run_id,
-                bronze_schema,
-                catalog,
-            )
-
-            if response["hasMore"]:
-                checkpoint = Checkpoint(
-                    phase="initial_snapshot",
-                    snapshot_ts=response["snapshot"],
-                    snapshot_cursor=response["cursor"],
-                    schema_hash=global_schema_hash,
-                )
-                save_checkpoint(source_id, control_table, checkpoint, run_id)
-                snapshot = response["snapshot"]
-                cursor = response["cursor"]
-                continue
-
-            checkpoint = Checkpoint(
-                phase="delta_tail",
-                delta_cursor=response["snapshot"],
-                schema_hash=global_schema_hash,
-            )
-            save_checkpoint(source_id, control_table, checkpoint, run_id)
-            break
+        checkpoint = run_snapshot_until_delta(
+            client,
+            initial_snapshot=None,
+            initial_cursor=None,
+            table_name=table_name,
+            table_fingerprints=table_fingerprints,
+            source_id=source_id,
+            run_id=run_id,
+            bronze_schema=bronze_schema,
+            catalog=catalog,
+            control_table=control_table,
+            schema_hash=global_schema_hash,
+        )
+    elif checkpoint.phase == "initial_snapshot":
+        checkpoint = run_snapshot_until_delta(
+            client,
+            initial_snapshot=checkpoint.snapshot_ts,
+            initial_cursor=checkpoint.snapshot_cursor,
+            table_name=table_name,
+            table_fingerprints=table_fingerprints,
+            source_id=source_id,
+            run_id=run_id,
+            bronze_schema=bronze_schema,
+            catalog=catalog,
+            control_table=control_table,
+            schema_hash=global_schema_hash,
+        )
 
     assert checkpoint is not None
     if checkpoint.delta_cursor is None:
