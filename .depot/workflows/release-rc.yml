@@ -59,7 +59,7 @@ jobs:
       !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release'))) &&
       needs.determine-version.outputs.should_publish == 'true'
     needs: determine-version
-    runs-on: depot-ubuntu-latest
+    runs-on: depot-ubuntu-latest-4
     permissions:
       contents: read
     steps:
