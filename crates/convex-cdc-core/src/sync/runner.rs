@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use serde::Serialize;
 
 use crate::{
@@ -9,7 +7,6 @@ use crate::{
         checkpoint::{Checkpoint, SyncState},
         schema::SchemaCatalog,
     },
-    sink::parquet::write_change_events_batch,
     state::checkpoint_store::CheckpointStore,
     sync::{
         delta_sync::{fetch_delta_events, DeltaSyncOptions},
@@ -21,6 +18,15 @@ use crate::{
 pub struct ExportRunner {
     client: ConvexClient,
     schemas: SchemaCatalog,
+}
+
+pub trait ChangeEventBatchWriter {
+    fn write_schema_snapshot(&mut self, schemas: &SchemaCatalog) -> AppResult<()>;
+    fn write_change_events(
+        &mut self,
+        checkpoint: &Checkpoint,
+        events: &[crate::model::event::ChangeEvent],
+    ) -> AppResult<()>;
 }
 
 impl ExportRunner {
@@ -37,16 +43,8 @@ impl ExportRunner {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct SyncOnceOptions {
-    pub raw_change_log_path: PathBuf,
-    pub checkpoint_path: PathBuf,
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct SyncOnceSummary {
-    pub raw_change_log_path: PathBuf,
-    pub checkpoint_path: PathBuf,
     pub snapshot_pages_fetched: usize,
     pub delta_pages_fetched: usize,
     pub events_written: usize,
@@ -57,19 +55,19 @@ impl ExportRunner {
     pub async fn sync_once(
         &self,
         checkpoint_store: &impl CheckpointStore,
-        options: &SyncOnceOptions,
+        writer: &mut impl ChangeEventBatchWriter,
     ) -> AppResult<SyncOnceSummary> {
         let mut snapshot_pages_fetched = 0usize;
         let mut delta_pages_fetched = 0usize;
         let mut events_written = 0usize;
 
-        self.schemas.write_snapshot(&options.raw_change_log_path)?;
+        writer.write_schema_snapshot(&self.schemas)?;
         let mut checkpoint = checkpoint_store.load()?;
         let delta_cursor = match checkpoint.as_ref().map(|checkpoint| &checkpoint.sync_state) {
             None => {
                 self.run_snapshot_until_delta(
                     checkpoint_store,
-                    options,
+                    writer,
                     &mut snapshot_pages_fetched,
                     &mut events_written,
                     None,
@@ -79,7 +77,7 @@ impl ExportRunner {
             Some(SyncState::InitialSnapshot { snapshot, cursor }) => {
                 self.run_snapshot_until_delta(
                     checkpoint_store,
-                    options,
+                    writer,
                     &mut snapshot_pages_fetched,
                     &mut events_written,
                     Some((*snapshot, cursor.clone())),
@@ -92,7 +90,7 @@ impl ExportRunner {
         let final_checkpoint = self
             .run_delta_sync(
                 checkpoint_store,
-                options,
+                writer,
                 &mut delta_pages_fetched,
                 &mut events_written,
                 delta_cursor,
@@ -101,8 +99,6 @@ impl ExportRunner {
         checkpoint = Some(final_checkpoint);
 
         Ok(SyncOnceSummary {
-            raw_change_log_path: options.raw_change_log_path.clone(),
-            checkpoint_path: options.checkpoint_path.clone(),
             snapshot_pages_fetched,
             delta_pages_fetched,
             events_written,
@@ -113,7 +109,7 @@ impl ExportRunner {
     async fn run_snapshot_until_delta(
         &self,
         checkpoint_store: &impl CheckpointStore,
-        options: &SyncOnceOptions,
+        writer: &mut impl ChangeEventBatchWriter,
         snapshot_pages_fetched: &mut usize,
         events_written: &mut usize,
         initial_state: Option<(i64, String)>,
@@ -137,11 +133,7 @@ impl ExportRunner {
             if result.has_more {
                 let next_cursor = result.cursor.ok_or(AppError::MissingSnapshotCursor)?;
                 let checkpoint = Checkpoint::initial_snapshot(result.snapshot, next_cursor.clone());
-                write_change_events_batch(
-                    &options.raw_change_log_path,
-                    &checkpoint,
-                    &result.events,
-                )?;
+                writer.write_change_events(&checkpoint, &result.events)?;
                 *events_written += result.events.len();
                 *snapshot_pages_fetched += result.pages_fetched;
                 checkpoint_store.save(&checkpoint)?;
@@ -151,7 +143,7 @@ impl ExportRunner {
             }
 
             let checkpoint = Checkpoint::delta_tail(result.snapshot);
-            write_change_events_batch(&options.raw_change_log_path, &checkpoint, &result.events)?;
+            writer.write_change_events(&checkpoint, &result.events)?;
             *events_written += result.events.len();
             *snapshot_pages_fetched += result.pages_fetched;
             checkpoint_store.save(&checkpoint)?;
@@ -162,7 +154,7 @@ impl ExportRunner {
     async fn run_delta_sync(
         &self,
         checkpoint_store: &impl CheckpointStore,
-        options: &SyncOnceOptions,
+        writer: &mut impl ChangeEventBatchWriter,
         delta_pages_fetched: &mut usize,
         events_written: &mut usize,
         mut cursor: i64,
@@ -181,7 +173,7 @@ impl ExportRunner {
 
             cursor = result.cursor;
             let checkpoint = Checkpoint::delta_tail(cursor);
-            write_change_events_batch(&options.raw_change_log_path, &checkpoint, &result.events)?;
+            writer.write_change_events(&checkpoint, &result.events)?;
             *events_written += result.events.len();
             *delta_pages_fetched += result.pages_fetched;
             checkpoint_store.save(&checkpoint)?;

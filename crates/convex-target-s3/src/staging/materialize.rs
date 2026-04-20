@@ -7,12 +7,15 @@ use std::{
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{
+use convex_cdc_core::{
     errors::AppResult,
     model::{
         event::{ChangeEvent, ChangeOperation},
         schema::SchemaCatalog,
     },
+};
+
+use crate::{
     sink::parquet::{list_change_event_batch_paths, read_change_events_files, write_staging_table},
     staging::project::{StagingColumnKind, StagingColumnProjection, StagingProjection, StagingRow},
     staging::state::{schema_snapshot_hash, FileStagingStateStore, StagingState},
@@ -487,13 +490,11 @@ mod tests {
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use serde_json::json;
 
-    use crate::{
-        model::{
-            checkpoint::Checkpoint,
-            event::{ChangeEvent, ChangeOperation},
-            schema::SchemaCatalog,
-        },
-        sink::parquet::write_change_events_batch,
+    use crate::sink::parquet::write_change_events_batch;
+    use convex_cdc_core::model::{
+        checkpoint::Checkpoint,
+        event::{ChangeEvent, ChangeOperation},
+        schema::SchemaCatalog,
     };
 
     use super::{MaterializeStagingOptions, StagingMaterializer};

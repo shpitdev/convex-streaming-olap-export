@@ -866,15 +866,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "convex-streaming-olap-export"
+name = "convex-cdc-core"
 version = "0.1.0"
 dependencies = [
- "arrow-array",
  "arrow-schema",
- "aws-config",
- "aws-sdk-s3",
  "clap",
- "dotenvy",
  "hex",
  "parquet",
  "reqwest",
@@ -885,6 +881,37 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
+]
+
+[[package]]
+name = "convex-sync"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "convex-cdc-core",
+ "convex-target-s3",
+ "dotenvy",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "convex-target-s3"
+version = "0.1.0"
+dependencies = [
+ "arrow-array",
+ "arrow-schema",
+ "aws-config",
+ "aws-sdk-s3",
+ "convex-cdc-core",
+ "hex",
+ "parquet",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "tracing",
  "url",
  "walkdir",
 ]

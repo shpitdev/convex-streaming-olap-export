@@ -16,14 +16,51 @@ use parquet::{
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::{
+use convex_cdc_core::{
     errors::{AppError, AppResult},
     model::{
         checkpoint::{Checkpoint, SyncState},
         event::ChangeEvent,
+        schema::SchemaCatalog,
     },
-    staging::project::{StagingColumnKind, StagingColumnProjection, StagingProjection, StagingRow},
+    sync::runner::ChangeEventBatchWriter,
 };
+
+use crate::staging::project::{
+    StagingColumnKind, StagingColumnProjection, StagingProjection, StagingRow,
+};
+
+#[derive(Debug, Clone)]
+pub struct ParquetRawChangeLogWriter {
+    output_dir: PathBuf,
+}
+
+impl ParquetRawChangeLogWriter {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self {
+            output_dir: path.into(),
+        }
+    }
+
+    pub fn output_dir(&self) -> &Path {
+        &self.output_dir
+    }
+}
+
+impl ChangeEventBatchWriter for ParquetRawChangeLogWriter {
+    fn write_schema_snapshot(&mut self, schemas: &SchemaCatalog) -> AppResult<()> {
+        schemas.write_snapshot(&self.output_dir)
+    }
+
+    fn write_change_events(
+        &mut self,
+        checkpoint: &Checkpoint,
+        events: &[ChangeEvent],
+    ) -> AppResult<()> {
+        let _ = write_change_events_batch(&self.output_dir, checkpoint, events)?;
+        Ok(())
+    }
+}
 
 pub fn write_change_events_batch(
     output_dir: &Path,
@@ -330,8 +367,8 @@ fn change_events_from_batch(batch: &RecordBatch) -> AppResult<Vec<ChangeEvent>> 
     let mut events = Vec::with_capacity(batch.num_rows());
     for row in 0..batch.num_rows() {
         let op = match op.value(row) {
-            "upsert" => crate::model::event::ChangeOperation::Upsert,
-            "delete" => crate::model::event::ChangeOperation::Delete,
+            "upsert" => convex_cdc_core::model::event::ChangeOperation::Upsert,
+            "delete" => convex_cdc_core::model::event::ChangeOperation::Delete,
             other => {
                 return Err(AppError::InvalidParquetSchema(format!(
                     "unexpected op value `{other}`"
@@ -414,14 +451,12 @@ mod tests {
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use serde_json::json;
 
-    use crate::{
-        model::{
-            checkpoint::Checkpoint,
-            event::{ChangeEvent, ChangeOperation},
-        },
-        staging::project::{
-            StagingColumnKind, StagingColumnProjection, StagingProjection, StagingRow,
-        },
+    use crate::staging::project::{
+        StagingColumnKind, StagingColumnProjection, StagingProjection, StagingRow,
+    };
+    use convex_cdc_core::model::{
+        checkpoint::Checkpoint,
+        event::{ChangeEvent, ChangeOperation},
     };
 
     use super::{read_change_events_dir, write_change_events_batch, write_staging_table};

@@ -5,27 +5,32 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
-use convex_streaming_olap_export::{
+use convex_cdc_core::{
     config::{ConvexConnectionConfig, OutputConfig, OutputFormat},
     convex::{client::ConvexClient, schemas::JsonSchemasQuery},
     errors::AppResult,
     model::schema::SchemaCatalog,
-    publish::{publish_staging_to_s3, PublishS3Options},
-    service::{run_service, RunOptions},
-    sink::jsonl::{write_jsonl_stream, write_value},
-    staging::materialize::{MaterializeStagingOptions, StagingMaterializer},
     state::checkpoint_store::FileCheckpointStore,
     sync::{
         delta_sync::{fetch_delta_events, DeltaSyncOptions},
-        runner::{ExportRunner, SyncOnceOptions},
+        runner::ExportRunner,
         snapshot_sync::{fetch_snapshot_events, SnapshotSyncOptions},
     },
     telemetry::{logging, metrics},
 };
+use convex_target_s3::{
+    publish::{publish_staging_to_s3, PublishS3Options},
+    service::{run_service, RunOptions},
+    sink::{
+        jsonl::{write_jsonl_stream, write_value},
+        parquet::ParquetRawChangeLogWriter,
+    },
+    staging::materialize::{MaterializeStagingOptions, StagingMaterializer},
+};
 use url::Url;
 
 #[derive(Debug, Parser)]
-#[command(author, version, about = "Convex streaming export probe CLI")]
+#[command(author, version, about = "Convex CDC sync CLI")]
 struct Cli {
     #[command(flatten)]
     connection: ConnectionArgs,
@@ -236,13 +241,11 @@ async fn handle_snapshot(client: &ConvexClient, args: SnapshotArgs) -> AppResult
     let mut writer = open_writer(&output)?;
     if args.raw {
         let response = client
-            .list_snapshot(
-                &convex_streaming_olap_export::convex::snapshot::ListSnapshotQuery {
-                    snapshot: args.snapshot,
-                    cursor: args.cursor,
-                    table_name: args.table_name,
-                },
-            )
+            .list_snapshot(&convex_cdc_core::convex::snapshot::ListSnapshotQuery {
+                snapshot: args.snapshot,
+                cursor: args.cursor,
+                table_name: args.table_name,
+            })
             .await?;
         write_value(&mut writer, &response, output.format)?;
     } else {
@@ -279,12 +282,10 @@ async fn handle_deltas(client: &ConvexClient, args: DeltasArgs) -> AppResult<()>
     let mut writer = open_writer(&output)?;
     if args.raw {
         let response = client
-            .document_deltas(
-                &convex_streaming_olap_export::convex::deltas::DocumentDeltasQuery {
-                    cursor: args.cursor,
-                    table_name: args.table_name,
-                },
-            )
+            .document_deltas(&convex_cdc_core::convex::deltas::DocumentDeltasQuery {
+                cursor: args.cursor,
+                table_name: args.table_name,
+            })
             .await?;
         write_value(&mut writer, &response, output.format)?;
     } else {
@@ -314,15 +315,8 @@ async fn handle_sync_once(client: &ConvexClient, args: SyncOnceArgs) -> AppResul
     let schemas = load_schema_catalog(client).await?;
     let runner = ExportRunner::new(client.clone(), schemas);
     let checkpoint_store = FileCheckpointStore::new(&args.checkpoint_path);
-    let summary = runner
-        .sync_once(
-            &checkpoint_store,
-            &SyncOnceOptions {
-                raw_change_log_path: args.output,
-                checkpoint_path: args.checkpoint_path,
-            },
-        )
-        .await?;
+    let mut writer = ParquetRawChangeLogWriter::new(args.output);
+    let summary = runner.sync_once(&checkpoint_store, &mut writer).await?;
 
     let stdout = io::stdout();
     let mut writer = BufWriter::new(stdout.lock());
@@ -395,12 +389,10 @@ async fn load_schema_catalog(client: &ConvexClient) -> AppResult<SchemaCatalog> 
 
 fn build_client(connection: &ConnectionArgs) -> AppResult<ConvexClient> {
     let deployment_url = connection.deployment_url.clone().ok_or(
-        convex_streaming_olap_export::errors::AppError::MissingRequiredConfig(
-            "CONVEX_DEPLOYMENT_URL",
-        ),
+        convex_cdc_core::errors::AppError::MissingRequiredConfig("CONVEX_DEPLOYMENT_URL"),
     )?;
     let deploy_key = connection.deploy_key.clone().ok_or(
-        convex_streaming_olap_export::errors::AppError::MissingRequiredConfig("CONVEX_DEPLOY_KEY"),
+        convex_cdc_core::errors::AppError::MissingRequiredConfig("CONVEX_DEPLOY_KEY"),
     )?;
     ConvexClient::new(ConvexConnectionConfig::new(deployment_url, deploy_key)?)
 }

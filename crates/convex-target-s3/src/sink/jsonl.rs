@@ -6,7 +6,7 @@ use std::{
 
 use serde::Serialize;
 
-use crate::{config::OutputFormat, errors::AppResult};
+use convex_cdc_core::{config::OutputFormat, errors::AppResult};
 
 pub fn write_value<W, T>(writer: &mut W, value: &T, format: OutputFormat) -> AppResult<()>
 where

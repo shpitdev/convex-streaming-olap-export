@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
-use crate::errors::{AppError, AppResult};
+use convex_cdc_core::errors::{AppError, AppResult};
 
 const MANIFEST_VERSION: i64 = 1;
 

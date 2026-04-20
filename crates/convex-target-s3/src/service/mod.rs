@@ -4,16 +4,20 @@ use serde::Serialize;
 use tokio::time::sleep;
 use tracing::info;
 
-use crate::{
+use convex_cdc_core::{
     convex::{client::ConvexClient, schemas::JsonSchemasQuery},
     errors::{AppError, AppResult},
     model::schema::SchemaCatalog,
+    state::checkpoint_store::FileCheckpointStore,
+    sync::runner::{ExportRunner, SyncOnceSummary},
+};
+
+use crate::{
     publish::{publish_staging_to_s3, staging_needs_publish, PublishS3Options, PublishS3Summary},
+    sink::parquet::ParquetRawChangeLogWriter,
     staging::materialize::{
         MaterializeStagingOptions, MaterializeStagingSummary, StagingMaterializer,
     },
-    state::checkpoint_store::FileCheckpointStore,
-    sync::runner::{ExportRunner, SyncOnceOptions, SyncOnceSummary},
 };
 
 #[derive(Debug, Clone)]
@@ -94,15 +98,8 @@ async fn run_iteration(
     let schemas = load_schema_catalog(client).await?;
     let runner = ExportRunner::new(client.clone(), schemas);
     let checkpoint_store = FileCheckpointStore::new(&options.checkpoint_path);
-    let sync = runner
-        .sync_once(
-            &checkpoint_store,
-            &SyncOnceOptions {
-                raw_change_log_path: options.raw_change_log_path.clone(),
-                checkpoint_path: options.checkpoint_path.clone(),
-            },
-        )
-        .await?;
+    let mut writer = ParquetRawChangeLogWriter::new(&options.raw_change_log_path);
+    let sync = runner.sync_once(&checkpoint_store, &mut writer).await?;
     let staging = StagingMaterializer::materialize(&MaterializeStagingOptions {
         raw_change_log_dir: options.raw_change_log_path.clone(),
         output_dir: options.staging_output_dir.clone(),
@@ -180,6 +177,8 @@ mod tests {
 
     use super::{should_publish, validate_run_options, RunOptions};
     use crate::staging::materialize::MaterializeStagingSummary;
+    use convex_cdc_core::config::ConvexConnectionConfig;
+    use convex_cdc_core::convex::client::ConvexClient;
 
     fn sample_options() -> RunOptions {
         RunOptions {
@@ -232,8 +231,8 @@ mod tests {
         let mut options = sample_options();
         options.max_iterations = Some(0);
 
-        let client = crate::convex::client::ConvexClient::new(
-            crate::config::ConvexConnectionConfig::new(
+        let client = ConvexClient::new(
+            ConvexConnectionConfig::new(
                 url::Url::parse("https://example.convex.cloud").unwrap(),
                 "prod:example|secret".to_string(),
             )

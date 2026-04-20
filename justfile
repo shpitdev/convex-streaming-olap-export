@@ -26,25 +26,25 @@ depot-ci *args:
   depot ci run --workflow .depot/workflows/ci.yml {{args}}
 
 schemas *args:
-  cargo run --bin convex-export -- schemas {{args}}
+  cargo run -p convex-sync -- schemas {{args}}
 
 snapshot *args:
-  cargo run --bin convex-export -- snapshot {{args}}
+  cargo run -p convex-sync -- snapshot {{args}}
 
 deltas *args:
-  cargo run --bin convex-export -- deltas {{args}}
+  cargo run -p convex-sync -- deltas {{args}}
 
 sync-once *args:
-  cargo run --bin convex-export -- sync-once {{args}}
+  cargo run -p convex-sync -- sync-once {{args}}
 
 materialize-staging *args:
-  cargo run --bin convex-export -- materialize-staging {{args}}
+  cargo run -p convex-sync -- materialize-staging {{args}}
 
 publish-s3 *args:
-  cargo run --bin convex-export -- publish-s3 {{args}}
+  cargo run -p convex-sync -- publish-s3 {{args}}
 
 run *args:
-  cargo run --bin convex-export -- run {{args}}
+  cargo run -p convex-sync -- run {{args}}
 
 aws-template-snapshot label="templates":
   ./scripts/snapshot-aws-templates.sh {{label}}
