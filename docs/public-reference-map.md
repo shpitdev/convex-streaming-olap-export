@@ -116,18 +116,7 @@ When possible, our source-side behavior should stay aligned with the public
 Today we intentionally differ from the Fivetran connector in these ways:
 
 - we do not implement the Fivetran gRPC runtime
-- we write Parquet datasets instead of pushing rows into a Fivetran destination
-- we materialize local `staging` tables directly instead of relying on warehouse-native managed tables
-- we currently use our own staging-state/materialization design because Fivetran's internal incremental warehouse maintenance is not public
-
-## Next Slice Guidance
-
-For incremental staging updates:
-
-- use `fivetran_source/src/sync.rs` as the reference for source checkpoint behavior
-- do **not** assume Fivetran destination update internals are available
-- prefer keeping both:
-  - full rebuild path
-  - incremental update path
-
-If those two paths ever disagree, the full rebuild path is the correctness reference.
+- we support target-owned landing contracts instead of one destination runtime
+- the S3/export path writes Parquet datasets instead of pushing rows into a Fivetran destination
+- the S3/export path materializes local `staging` tables instead of relying on warehouse-native managed tables
+- the Databricks-native path lands bronze CDC rows directly and relies on Lakeflow `AUTO CDC` for current-state resolution
