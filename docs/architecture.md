@@ -1,263 +1,159 @@
 # Architecture
 
-## Project Shape
+## Shape
 
-This repo should start as an independent exporter with one concrete source and one concrete sink:
+This repo has three explicit layers:
 
-- source: Convex streaming export API
-- sink: Parquet files
+- `core`: Convex extraction and checkpoint semantics
+- `target-s3`: raw parquet, staging parquet, and S3 publish
+- `platform/databricks`: Databricks assets for both S3-backed consumption and Databricks-native landing
 
-But the output contract has named layers:
+The shared extraction logic stays target-agnostic. Targets decide how event
+batches are durably written and what downstream shape they expose.
 
-- `raw_change_log`
-- `staging`
-- `marts`
+## Extraction Model
 
-Only the first two are owned here. `marts` are usually downstream.
+The repo stays aligned with the public Convex/Fivetran extraction contract:
 
-## Behavioral Target
+1. fetch schemas
+2. walk a consistent snapshot with `list_snapshot`
+3. persist `snapshot + cursor` while the snapshot is incomplete
+4. hand off from the final snapshot timestamp to `document_deltas`
+5. treat deletes as first-class events
+6. advance checkpoints only after durable writes succeed
 
-We want to stay close to the upstream Convex/Fivetran export behavior:
+That is the stable core. Scheduling, warehouse maintenance, and consumer
+integration differ per target family.
 
-1. Fetch schemas.
-2. Walk a full consistent snapshot with `list_snapshot`.
-3. Save the returned snapshot timestamp.
-4. Poll `document_deltas` from that timestamp forward.
-5. Treat deletes as first-class events.
-6. Only advance checkpoint after output is durably written.
+## Shared Core
 
-That gives us compatibility at the sync-model level without inheriting the Fivetran runtime model.
+The core layer owns:
 
-## Named Layers
+- Convex HTTP calls
+- schema fetch + fingerprinting
+- `ChangeEvent` normalization
+- checkpoint state transitions
+- snapshot orchestration
+- delta orchestration
+
+It should not know anything about:
+
+- S3
+- Databricks
+- Foundry
+- Unity Catalog
+- Terraform
+
+## `S3/export`
+
+```text
+Convex
+  -> raw_change_log parquet
+  -> staging parquet
+  -> S3 publish
+```
+
+Owned pieces:
+
+- append-only raw parquet sink
+- checkpoint file
+- staging materializer
+- staging state
+- S3 publish manifest
+
+Use it when you want:
+
+- replayable local artifacts
+- a target-agnostic export contract
+- another platform to consume S3 directly
+
+## `Databricks/native`
+
+```text
+Convex
+  -> bronze CDC Delta tables
+  -> checkpoint Delta table
+  -> Lakeflow AUTO CDC
+  -> silver current-state Delta tables
+```
+
+Owned pieces:
+
+- extractor job entrypoint
+- control/checkpoint schema
+- bronze CDC tables
+- Lakeflow `AUTO CDC` templates
+
+Use it when:
+
+- Databricks is the primary serving layer
+- you want Databricks-native CDC reconstruction
+- downstream consumers can read Unity Catalog tables directly
+
+## Data Shapes
 
 ### `raw_change_log`
 
-Durable append-only replication history.
-
-Properties:
+Append-only replication history.
 
 - one row per source change event
 - restart-safe and replayable
-- flexible enough to tolerate schema drift
-- not meant to be the final analyst-facing shape
+- preserves multiple updates to the same document
 
 ### `staging`
 
-Source-conformed current-state tables materialized from `raw_change_log`.
-
-Properties:
+Source-conformed current-state tables derived from `raw_change_log`.
 
 - one current row per source `_id`
-- deletes have already been applied
-- columns are projected into a cleaner table shape
-- still source-centric, not business-centric
+- deletes applied
+- source-centric shape, not business-centric
 
-This is the closest analog to Fivetran-managed base tables.
+### `bronze CDC`
 
-### `marts`
+Append-only CDC landing in Delta.
 
-Business-centric downstream models built from `staging`.
+- one row per source change event
+- explicit key, sequence, and delete columns
+- intended for Lakeflow `AUTO CDC`
 
-Properties:
+### `silver`
 
-- joins across entities
-- denormalized reporting tables
-- metrics-oriented facts and dimensions
+Current-state Delta tables derived from bronze CDC.
 
-These usually belong in dbt or the target warehouse, not in the exporter runtime.
+- one current row per source key
+- resolved with Databricks-native CDC semantics
 
-### `intermediate`
+## Checkpoints
 
-Optional helper layer between `staging` and `marts`.
+One logical checkpoint per source is still enough:
 
-Use it only if a transformation is reusable but not yet a final business model.
+- during snapshot: `InitialSnapshot { snapshot, cursor }`
+- during delta tail: `DeltaTail { cursor }`
 
-## Boundaries
+Rules:
 
-### Source Layer
+- after partial snapshot pages, save `snapshot + cursor`
+- after the final snapshot page, save the snapshot timestamp as the initial delta cursor
+- after each successful delta batch write, save the returned delta cursor
+- never advance before the target write succeeds
 
-Responsible for:
+Target storage differs:
 
-- calling Convex HTTP endpoints
-- authenticating with a deploy key
-- decoding schemas
-- decoding snapshot pages
-- decoding delta pages
+- `S3/export`: file-backed JSON
+- `Databricks/native`: Delta control table
 
-It should not know anything about Databricks or Palantir.
-
-### Sync Engine
-
-Responsible for:
-
-- initial sync orchestration
-- incremental sync orchestration
-- retry behavior
-- checkpoint rules
-- idempotency rules
-
-This is the core of the repo.
-
-### Sink Layer
-
-Responsible for:
-
-- translating change events into Parquet rows
-- file rotation / partitioning
-- durable flush behavior
-
-For now, keep this sink concrete. Do not build a plugin system yet.
-
-### Materializer
-
-Responsible for:
-
-- replaying `raw_change_log`
-- resolving the latest state per `_id`
-- applying deletes
-- projecting rows into `staging`
-
-This layer still belongs in this repo. It is destination-agnostic data shaping, not business modeling.
-
-## Ownership Boundary
+## Boundary
 
 This repo should own:
 
 - Convex extraction
-- checkpointing
-- `raw_change_log`
-- `staging`
+- checkpoint semantics
+- S3/export target code
+- Databricks-native landing assets
 
-Downstream systems should usually own:
+Downstream systems should own:
 
-- `intermediate`
-- `marts`
-- BI-specific denormalization
-- metrics and semantic modeling
-
-## `raw_change_log` Shape
-
-Start with an append-only replication log instead of trying to materialize final destination tables immediately.
-
-Suggested records:
-
-- `table_name`
-- `_id`
-- `_ts`
-- `op` where `op in {upsert, delete}`
-- `schema_fingerprint`
-- `document` as JSON payload for upserts
-
-Why:
-
-- simple to write
-- simple to recover
-- easy to replay into another sink later
-- preserves full change history
-
-## Materialization Behavior
-
-Once data lands in `raw_change_log`, the flow is:
-
-1. Read events for a table in event order.
-2. For each `_id`, keep the latest surviving event.
-3. If the latest event is `delete`, remove that row from `staging`.
-4. If the latest event is `upsert`, write the projected row into `staging`.
-5. Let downstream systems build `marts` from `staging`.
-
-`staging` can be rebuilt from scratch from `raw_change_log`, or updated incrementally once the mechanics are reliable.
-
-## Checkpoint Strategy
-
-Single checkpoint is enough for v0:
-
-- last fully committed delta cursor
-
-Rules:
-
-- after snapshot completes, save the snapshot timestamp as the initial delta cursor
-- after each successful delta batch write, save the returned cursor
-- never advance checkpoint before data is flushed successfully
-
-If the process crashes after writing but before checkpointing, reprocessing a small delta window is acceptable as long as downstream replay can tolerate duplicates or we make file commit atomic.
-
-## Failure Model
-
-We should design for:
-
-- process restart
-- transient Convex API failures
-- partial page write failure
-- schema drift between runs
-
-We do not need distributed coordination in v0. A single worker process is enough.
-
-## Schema Evolution
-
-The safest split is:
-
-- keep `raw_change_log` schema stable
-- let `staging` absorb most source schema projection rules
-
-### Additive changes
-
-If Convex adds a field:
-
-- `raw_change_log`: new payload includes the field, no envelope change required
-- `staging`: add the new column, backfill old rows as `NULL`
-
-### Field removal
-
-If Convex removes a field:
-
-- `raw_change_log`: old events still contain it, new ones do not
-- `staging`: keep the column nullable for a compatibility window, then remove it deliberately
-
-### Field rename
-
-Treat rename as:
-
-- add new field
-- deprecate old field
-
-Do not try to infer renames automatically.
-
-### Type change
-
-Widening changes are usually manageable.
-
-Examples:
-
-- `int -> long`
-- narrower string constraint -> wider string constraint
-
-Narrowing or incompatible changes should require an explicit rule in the materializer and may require a `staging` rebuild.
-
-### Primary key identity
-
-For v0, assume Convex `_id` is the stable identity. If identity semantics change, that should trigger a deliberate rebuild rather than an automatic migration.
-
-## Future Layers
-
-These should stay out of the first slice:
-
-- `marts`
-- S3-backed warehouse-specific loaders
-- Databricks loader
-- object-store sink manager
-- Palantir compute-module packaging
-- metrics backend integration
-
-Those are adapters around the core exporter, not the exporter itself.
-
-## Rust Guidance
-
-Keep the first version boring:
-
-- concrete structs over traits
-- one binary crate
-- async HTTP client
-- plain JSON checkpoint file
-- local filesystem output first
-
-That will make the code easier to learn and easier to change.
+- business marts
+- semantic models
+- BI-facing denormalization
+- app-specific joins
