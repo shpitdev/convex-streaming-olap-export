@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source_dir="$repo_root/ops/aws"
+source_dir="$repo_root/platform/aws"
 label="${1:-templates}"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 dest_dir="$repo_root/.memory/aws-template-snapshots/${timestamp}-${label}"

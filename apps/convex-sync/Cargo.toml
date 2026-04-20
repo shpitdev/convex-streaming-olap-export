@@ -1,0 +1,18 @@
+[package]
+name = "convex-sync"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "convex-sync"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+convex-cdc-core = { path = "../../crates/convex-cdc-core" }
+convex-target-s3 = { path = "../../crates/convex-target-s3" }
+dotenvy.workspace = true
+tokio.workspace = true
+url.workspace = true

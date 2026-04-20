@@ -1,19 +1,18 @@
-[package]
-name = "convex-streaming-olap-export"
-version = "0.1.0"
+[workspace]
+members = [
+  "apps/convex-sync",
+  "crates/convex-cdc-core",
+  "crates/convex-target-s3",
+]
+resolver = "2"
+
+[workspace.package]
 edition = "2021"
 license = "MIT"
 publish = false
+version = "0.1.0"
 
-[lib]
-name = "convex_streaming_olap_export"
-path = "src/lib.rs"
-
-[[bin]]
-name = "convex-export"
-path = "src/bin/convex-export.rs"
-
-[dependencies]
+[workspace.dependencies]
 arrow-array = "54.2.1"
 arrow-schema = "54.2.1"
 aws-config = "1.8.8"
