@@ -5,17 +5,19 @@ on:
       - release
     types:
       - completed
+  workflow_dispatch:
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 jobs:
   determine-version:
     name: 01-resolve-version
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
+      (github.event_name == 'workflow_dispatch' && github.ref_name == 'main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main' &&
       !contains(github.event.workflow_run.head_commit.message, 'release-please--branches--main') &&
-      !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release')
+      !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release'))
     runs-on: depot-ubuntu-latest
     permissions:
       contents: read
@@ -29,31 +31,33 @@ jobs:
       - name: checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
       - name: resolve-prerelease-version
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
         run: |
-          stable_count="$(gh api "repos/${{ github.repository }}/releases?per_page=100" --jq 'map(select((.draft | not) and (.prerelease | not) and (.target_commitish == "${{ github.event.workflow_run.head_sha }}"))) | length')"
+          stable_count="$(gh api "repos/${{ github.repository }}/releases?per_page=100" --jq "map(select((.draft | not) and (.prerelease | not) and (.target_commitish == \"${HEAD_SHA}\"))) | length")"
           if [[ "${stable_count}" != "0" ]]; then
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "head_sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+            echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          bash scripts/resolve-prerelease-version.sh "${{ github.repository }}" main "${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          echo "head_sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          bash scripts/resolve-prerelease-version.sh "${{ github.repository }}" main "${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
           echo "should_publish=true" >> "$GITHUB_OUTPUT"
 
   build-prerelease:
     name: 02-build-cli-linux-amd64
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref_name == 'main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main' &&
-      needs.determine-version.outputs.should_publish == 'true' &&
       !contains(github.event.workflow_run.head_commit.message, 'release-please--branches--main') &&
-      !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release')
+      !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release'))) &&
+      needs.determine-version.outputs.should_publish == 'true'
     needs: determine-version
     runs-on: depot-ubuntu-latest
     permissions:
@@ -95,11 +99,12 @@ jobs:
   publish-prerelease:
     name: 03-publish-prerelease
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref_name == 'main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main' &&
-      needs.determine-version.outputs.should_publish == 'true' &&
       !contains(github.event.workflow_run.head_commit.message, 'release-please--branches--main') &&
-      !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release')
+      !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release'))) &&
+      needs.determine-version.outputs.should_publish == 'true'
     needs:
       - determine-version
       - build-prerelease

@@ -18,14 +18,34 @@ extraction model:
 - continue with `document_deltas`
 - advance checkpoints only after durable writes succeed
 
-## Layout
+## Repo Map
 
-- `apps/convex-sync/`: operational CLI for the S3/export path
+```mermaid
+flowchart TD
+  Root[convex-streaming-olap-export]
+  CLI[apps/convex-sync]
+  Core[crates/convex-cdc-core]
+  S3[crates/convex-target-s3]
+  AWS[platform/aws]
+  DBS3[platform/databricks/s3]
+  DBN[platform/databricks/native]
+  Root --> CLI
+  Root --> Core
+  Root --> S3
+  Root --> AWS
+  Root --> DBS3
+  Root --> DBN
+```
+
+Read the repo by layer:
+
+- [`apps/convex-sync/README.md`](apps/convex-sync/README.md): CLI surface and S3/export runtime commands
 - `crates/convex-cdc-core/`: shared Convex client, checkpoint FSM, event normalization, sync engine
 - `crates/convex-target-s3/`: raw parquet sink, staging materialization, S3 publish flow
-- `platform/aws/`: AWS assets for S3 publishing and S3 consumer access
-- `platform/databricks/s3/`: Databricks consuming the S3 export path
-- `platform/databricks/native/`: Databricks-native extractor, bootstrap SQL, Lakeflow templates
+- [`platform/aws/README.md`](platform/aws/README.md): AWS assets for publishing and downstream readers
+- [`platform/databricks/README.md`](platform/databricks/README.md): Databricks target family overview
+- [`platform/databricks/s3/README.md`](platform/databricks/s3/README.md): Databricks consuming the S3 export path
+- [`platform/databricks/native/README.md`](platform/databricks/native/README.md): Databricks-native bronze/silver landing
 
 ## Install
 
@@ -49,7 +69,20 @@ Current release coverage:
 - release installs go to `~/.local/share/convex-sync/<version>/convex-sync`
 - command symlinks go in `~/.local/bin`
 
-## Supported Paths
+## Supported Variations
+
+```mermaid
+flowchart LR
+  C[Convex]
+  E[shared sync semantics]
+  S3[S3 export path]
+  DBN[Databricks native path]
+  DBS3[Databricks over S3 path]
+  C --> E
+  E --> S3
+  E -. mirrored extractor semantics .-> DBN
+  S3 --> DBS3
+```
 
 ### `S3/export`
 
@@ -92,6 +125,14 @@ Runtime split:
 2. checkpoint rows land in the control schema
 3. Lakeflow `AUTO CDC` materializes silver current-state tables
 
+### `Databricks over S3`
+
+This variation keeps the existing Rust exporter and S3 publish loop, then adds:
+
+1. Unity Catalog external location coverage over `staging/current`
+2. stable SQL views from `platform/databricks/s3/sql/register_staging_views.sql.tmpl`
+3. Databricks consumers reading the published parquet snapshots directly
+
 ## Platform Assets
 
 Snapshot templates into `.memory/` before running Terraform:
@@ -119,7 +160,17 @@ Remote:
 - `.depot/workflows/ci.yml` runs fmt/clippy/test
 - `.depot/workflows/release.yml` creates stable release PRs and publishes CLI archives
 - `.depot/workflows/release-rc.yml` publishes numbered prerelease archives from `main`
+- `.github/workflows/semantic-pr.yml` enforces conventional PR titles so stable releases can be created automatically from merged PRs
 - `.github/workflows/semgrep.yml` runs the lightweight security scan
+
+## Release Source Of Truth
+
+Stable releases are driven by merged PR titles on `main`.
+
+- use conventional PR titles such as `feat: ...`, `fix: ...`, or `deps: ...`
+- `release-please` now starts release history from commit `0cf9f47`
+- merge to `main` opens or advances the stable release PR automatically when a releasable PR lands
+- both release workflows also support manual `workflow_dispatch`, so there is always a button path in GitHub Actions
 
 ## References
 

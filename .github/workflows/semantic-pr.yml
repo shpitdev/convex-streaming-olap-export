@@ -1,0 +1,37 @@
+name: Semantic PR Title
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions:
+  pull-requests: read
+
+jobs:
+  semantic-pr:
+    name: semantic-pr/title
+    runs-on: ubuntu-24.04
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Validate PR title
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            deps
+            docs
+            chore
+            ci
+            refactor
+            test
+            build
+            perf
+            revert
+            style

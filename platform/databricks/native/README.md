@@ -7,6 +7,21 @@ Databricks as the primary landing plane:
 - a control table stores checkpoints
 - Lakeflow `AUTO CDC` turns bronze CDC into silver current-state tables
 
+```mermaid
+flowchart LR
+  C[Convex]
+  J[Databricks extractor job]
+  B[bronze CDC Delta]
+  K[checkpoint table]
+  L[Lakeflow AUTO CDC]
+  S[silver Delta]
+  C --> J
+  J --> B
+  J --> K
+  B --> L
+  L --> S
+```
+
 CDC metadata columns are reserved with a `_cdc_` prefix so user document fields
 cannot overwrite key, ordering, or delete semantics.
 
