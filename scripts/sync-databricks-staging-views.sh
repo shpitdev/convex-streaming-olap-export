@@ -11,6 +11,7 @@ bucket="${S3_BUCKET:-}"
 prefix="${S3_PREFIX:-}"
 label="${LABEL:-sync}"
 apply="${APPLY:-1}"
+check_external_location="${CHECK_EXTERNAL_LOCATION:-1}"
 
 usage() {
   cat >&2 <<'EOF'
@@ -24,6 +25,7 @@ options:
   --bucket <bucket>
   --prefix <prefix>
   --label <label>
+  --skip-external-location-check
   --render-only
 EOF
 }
@@ -37,6 +39,7 @@ while [ "$#" -gt 0 ]; do
     --bucket) bucket="$2"; shift 2 ;;
     --prefix) prefix="$2"; shift 2 ;;
     --label) label="$2"; shift 2 ;;
+    --skip-external-location-check) check_external_location=0; shift ;;
     --render-only) apply=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage; exit 1 ;;
@@ -53,8 +56,41 @@ normalized_prefix="${normalized_prefix%/}"
 manifest_key="staging/manifests/latest.json"
 if [ -n "$normalized_prefix" ]; then
   manifest_s3="s3://${bucket}/${normalized_prefix}/${manifest_key}"
+  current_root="s3://${bucket}/${normalized_prefix}/staging/current"
 else
   manifest_s3="s3://${bucket}/${manifest_key}"
+  current_root="s3://${bucket}/staging/current"
+fi
+
+ensure_external_location_covers_root() {
+  local root="$1"
+  local json
+  json="$(databricks external-locations list --profile "$profile" --output json)"
+
+  local matched_url
+  matched_url="$(
+    jq -r --arg root "$root" '
+      [
+        .[]
+        | .url
+        | select(. != null)
+        | sub("/+$"; "")
+        | select(($root | startswith(.)) or (. == $root))
+      ]
+      | sort_by(length)
+      | last // empty
+    ' <<<"$json"
+  )"
+
+  if [ -z "$matched_url" ]; then
+    echo "no Databricks external location covers $root" >&2
+    echo "configure a Unity Catalog external location for the published S3 root before applying views" >&2
+    exit 1
+  fi
+}
+
+if [ "$check_external_location" = "1" ]; then
+  ensure_external_location_covers_root "$current_root"
 fi
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -70,7 +106,7 @@ sed \
   -e "s|{{SCHEMA}}|$schema|g" \
   -e "s|{{BUCKET}}|$bucket|g" \
   -e "s|{{PREFIX}}|$normalized_prefix|g" \
-  "$repo_root/ops/databricks/sql/register_staging_views.sql.tmpl" > "$header_path"
+  "$repo_root/platform/databricks/s3/sql/register_staging_views.sql.tmpl" > "$header_path"
 
 sanitize_table_name() {
   local relative_path="$1"
