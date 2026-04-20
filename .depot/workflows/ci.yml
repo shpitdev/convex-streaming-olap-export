@@ -4,7 +4,7 @@
 # Changes made:
 # - Changed GitHub runs-on labels to their Depot equivalents
 
-name: CI
+name: ci
 on:
   pull_request:
   push:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 jobs:
   changes:
-    name: Changed Paths
+    name: 01-changed-paths
     runs-on: depot-ubuntu-24.04
     outputs:
       inspect: ${{ steps.scope.outputs.inspect }}
@@ -52,7 +52,7 @@ jobs:
           echo "sync=${sync}" >> "$GITHUB_OUTPUT"
 
   fmt:
-    name: Rustfmt
+    name: 02-rustfmt
     runs-on: depot-ubuntu-24.04 # was: ubuntu-24.04. Mapped standard GitHub runner to Depot equivalent.
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +63,7 @@ jobs:
       - name: Run rustfmt
         run: cargo fmt --all --check
   clippy-inspect:
-    name: Clippy / Inspect
+    name: 03-clippy-inspect
     needs: changes
     if: needs.changes.outputs.inspect == 'true'
     runs-on: depot-ubuntu-24.04
@@ -80,7 +80,7 @@ jobs:
       - name: Run clippy
         run: depot cargo clippy -p convex-sync-core -p convex-inspect --all-targets --all-features -- -D warnings
   test-inspect:
-    name: Test / Inspect
+    name: 04-test-inspect
     needs: changes
     if: needs.changes.outputs.inspect == 'true'
     runs-on: depot-ubuntu-24.04
@@ -95,7 +95,7 @@ jobs:
       - name: Run tests
         run: depot cargo test -p convex-sync-core -p convex-inspect
   clippy-sync:
-    name: Clippy / Sync
+    name: 05-clippy-sync
     needs: changes
     if: needs.changes.outputs.sync == 'true'
     runs-on: depot-ubuntu-latest-4
@@ -112,7 +112,7 @@ jobs:
       - name: Run clippy
         run: depot cargo clippy -p convex-export-s3 -p convex-sync --all-targets --all-features -- -D warnings
   test-sync:
-    name: Test / Sync
+    name: 06-test-sync
     needs: changes
     if: needs.changes.outputs.sync == 'true'
     runs-on: depot-ubuntu-latest-4

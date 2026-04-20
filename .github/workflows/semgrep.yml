@@ -1,4 +1,4 @@
-name: Semgrep
+name: semgrep
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   semgrep:
-    name: semgrep-oss/scan
+    name: 01-semgrep-oss-scan
     runs-on: ubuntu-24.04
     container:
       image: semgrep/semgrep
