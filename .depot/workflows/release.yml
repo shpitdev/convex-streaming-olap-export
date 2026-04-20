@@ -1,0 +1,89 @@
+name: release
+on:
+  push:
+    branches:
+      - main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+jobs:
+  release-please:
+    name: 01-release-please
+    runs-on: depot-ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: run-release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build-release:
+    name: 02-build-cli-linux-amd64
+    if: needs.release-please.outputs.release_created == 'true'
+    needs: release-please
+    runs-on: depot-ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - name: setup-depot
+        uses: depot/setup-action@v1
+      - name: install-sccache
+        run: sudo apt-get update && sudo apt-get install -y sccache
+      - name: install-rust-toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: build-cli-archive
+        shell: bash
+        run: |
+          version="${{ needs.release-please.outputs.tag_name }}"
+          archive="convex-sync_${version}_linux_amd64"
+          stage="dist/${archive}"
+          mkdir -p "${stage}"
+          CONVEX_SYNC_VERSION="${version#v}" depot cargo build --locked --release -p convex-sync
+          cp target/release/convex-sync "${stage}/convex-sync"
+          cp LICENSE NOTICE README.md "${stage}/"
+          tar -czf "dist/${archive}.tar.gz" -C dist "${archive}"
+          echo "ARCHIVE_PATH=dist/${archive}.tar.gz" >> "$GITHUB_ENV"
+      - name: upload-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-cli-linux-amd64
+          path: ${{ env.ARCHIVE_PATH }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish-release:
+    name: 03-publish-github-release
+    if: needs.release-please.outputs.release_created == 'true'
+    needs:
+      - release-please
+      - build-release
+    runs-on: depot-ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: download-artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-cli-*
+          path: dist
+          merge-multiple: true
+      - name: create-sha256sums
+        shell: bash
+        run: |
+          (cd dist && sha256sum * > SHA256SUMS)
+      - name: attach-to-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" dist/* --clobber --repo "${{ github.repository }}"

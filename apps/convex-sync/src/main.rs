@@ -29,8 +29,13 @@ use convex_target_s3::{
 };
 use url::Url;
 
+const CLI_VERSION: &str = match option_env!("CONVEX_SYNC_VERSION") {
+    Some(version) => version,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 #[derive(Debug, Parser)]
-#[command(author, version, about = "Convex CDC sync CLI")]
+#[command(author, version = CLI_VERSION, about = "Convex CDC sync CLI")]
 struct Cli {
     #[command(flatten)]
     connection: ConnectionArgs,

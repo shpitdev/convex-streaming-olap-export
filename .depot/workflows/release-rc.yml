@@ -1,0 +1,132 @@
+name: release-rc
+on:
+  workflow_run:
+    workflows:
+      - release
+    types:
+      - completed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+jobs:
+  determine-version:
+    name: 01-resolve-version
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      !contains(github.event.workflow_run.head_commit.message, 'release-please--branches--main') &&
+      !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release')
+    runs-on: depot-ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      tag_name: ${{ steps.version.outputs.tag_name }}
+      cli_version: ${{ steps.version.outputs.cli_version }}
+      head_sha: ${{ steps.version.outputs.head_sha }}
+      should_publish: ${{ steps.version.outputs.should_publish }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: resolve-prerelease-version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          stable_count="$(gh api "repos/${{ github.repository }}/releases?per_page=100" --jq 'map(select((.draft | not) and (.prerelease | not) and (.target_commitish == "${{ github.event.workflow_run.head_sha }}"))) | length')"
+          if [[ "${stable_count}" != "0" ]]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "head_sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          bash scripts/resolve-prerelease-version.sh "${{ github.repository }}" main "${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+
+  build-prerelease:
+    name: 02-build-cli-linux-amd64
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      needs.determine-version.outputs.should_publish == 'true' &&
+      !contains(github.event.workflow_run.head_commit.message, 'release-please--branches--main') &&
+      !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release')
+    needs: determine-version
+    runs-on: depot-ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.determine-version.outputs.head_sha }}
+      - name: setup-depot
+        uses: depot/setup-action@v1
+      - name: install-sccache
+        run: sudo apt-get update && sudo apt-get install -y sccache
+      - name: install-rust-toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: build-prerelease-archive
+        shell: bash
+        run: |
+          version="${{ needs.determine-version.outputs.cli_version }}"
+          tag_name="${{ needs.determine-version.outputs.tag_name }}"
+          archive="convex-sync_${tag_name}_linux_amd64"
+          stage="dist/${archive}"
+          mkdir -p "${stage}"
+          CONVEX_SYNC_VERSION="${version}" depot cargo build --locked --release -p convex-sync
+          cp target/release/convex-sync "${stage}/convex-sync"
+          cp LICENSE NOTICE README.md "${stage}/"
+          tar -czf "dist/${archive}.tar.gz" -C dist "${archive}"
+          echo "ARCHIVE_PATH=dist/${archive}.tar.gz" >> "$GITHUB_ENV"
+      - name: upload-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-cli-linux-amd64
+          path: ${{ env.ARCHIVE_PATH }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish-prerelease:
+    name: 03-publish-prerelease
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      needs.determine-version.outputs.should_publish == 'true' &&
+      !contains(github.event.workflow_run.head_commit.message, 'release-please--branches--main') &&
+      !startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release')
+    needs:
+      - determine-version
+      - build-prerelease
+    runs-on: depot-ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: download-artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rc-cli-*
+          path: dist
+          merge-multiple: true
+      - name: create-sha256sums
+        shell: bash
+        run: |
+          (cd dist && sha256sum * > SHA256SUMS)
+      - name: publish-prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag_name="${{ needs.determine-version.outputs.tag_name }}"
+          notes="Prerelease for ${{ needs.determine-version.outputs.head_sha }}"
+          if gh release view "${tag_name}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release edit "${tag_name}" --repo "${{ github.repository }}" --title "${tag_name}" --notes "${notes}" --prerelease --target "${{ needs.determine-version.outputs.head_sha }}"
+          else
+            gh release create "${tag_name}" --repo "${{ github.repository }}" --title "${tag_name}" --notes "${notes}" --prerelease --target "${{ needs.determine-version.outputs.head_sha }}"
+          fi
+          gh release upload "${tag_name}" dist/* --clobber --repo "${{ github.repository }}"

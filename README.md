@@ -27,6 +27,28 @@ extraction model:
 - `platform/databricks/s3/`: Databricks consuming the S3 export path
 - `platform/databricks/native/`: Databricks-native extractor, bootstrap SQL, Lakeflow templates
 
+## Install
+
+Release install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shpitdev/convex-streaming-olap-export/main/install.sh | bash
+```
+
+Local checkout dev install:
+
+```bash
+./install.sh --mode dev --force
+convex-sync-dev --help
+```
+
+Current release coverage:
+
+- stable and prerelease archives target `linux-amd64`
+- `convex-sync-dev` is checkout-linked and rebuilds incrementally via Cargo
+- release installs go to `~/.local/share/convex-sync/<version>/convex-sync`
+- command symlinks go in `~/.local/bin`
+
 ## Supported Paths
 
 ### `S3/export`
@@ -50,6 +72,7 @@ CLI:
 
 Or via `just`:
 
+- `just dev-cli --help`
 - `just sync-once`
 - `just materialize-staging`
 - `just publish-s3 --bucket your-bucket`
@@ -94,6 +117,8 @@ Local:
 Remote:
 
 - `.depot/workflows/ci.yml` runs fmt/clippy/test
+- `.depot/workflows/release.yml` creates stable release PRs and publishes CLI archives
+- `.depot/workflows/release-rc.yml` publishes numbered prerelease archives from `main`
 - `.github/workflows/semgrep.yml` runs the lightweight security scan
 
 ## References

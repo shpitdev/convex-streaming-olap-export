@@ -1,50 +1,59 @@
 # Release Artifacts
 
-This repo produces more than one distributable artifact.
+The operator-facing release artifact is the `convex-sync` CLI.
 
-## Primary Artifacts
+## Stable and Prerelease Assets
 
-- `convex-sync`: the Rust CLI binary built from `apps/convex-sync/`
-- `convex-cdc-core`: the shared extraction crate consumed by the app and targets
-- `convex-target-s3`: the S3/export target crate
+Each GitHub release should publish:
 
-The CLI is the only artifact that is directly operator-facing today. The crates
-are release artifacts only if we decide to publish internal versioned libraries.
+- `convex-sync_<tag>_linux_amd64.tar.gz`
+- `SHA256SUMS`
 
-## Platform Artifacts
+The archive contains:
 
-These are versioned with the repo, but they are not "binaries":
+- `convex-sync`
+- `LICENSE`
+- `NOTICE`
+- `README.md`
 
-- `platform/aws/`: Terraform templates for S3 publishing and S3 consumer access
-- `platform/databricks/s3/`: Terraform + SQL for the S3-backed Databricks path
-- `platform/databricks/native/extractor/convex_cdc_job.py`: Databricks-native extractor entrypoint
-- `platform/databricks/native/sql/bootstrap/`: ordered bootstrap SQL
-- `platform/databricks/native/lakeflow/`: Lakeflow `AUTO CDC` templates
+For now, that is enough to make the maintained Rust runtime easy to install and
+verify.
 
-## Sensible Release Shape
+## Dev Install Surface
 
-If we formalize releases, the clean default would be:
+This repo also ships a checkout-linked dev command:
 
-1. GitHub release tag for the repo
-2. attached `convex-sync` binaries and checksums
-3. optional container image for the S3/export runtime
-4. source tarball containing the platform assets
+- `scripts/convex-sync-dev`
+- installed as `convex-sync-dev` via `./install.sh --mode dev`
 
-## Out of Scope for This Repo
+That is not a release artifact, but it is part of the supported operator
+experience for local development.
 
-This repo should not try to publish:
+## Repo-Versioned Platform Assets
+
+These stay versioned with the repo and release tag, but they are not published
+as separate binary assets:
+
+- `platform/aws/`
+- `platform/databricks/s3/`
+- `platform/databricks/native/extractor/convex_cdc_job.py`
+- `platform/databricks/native/sql/bootstrap/`
+- `platform/databricks/native/lakeflow/`
+
+## Explicit Non-Artifacts
+
+This repo should not publish:
 
 - Terraform state
 - rendered `.tfvars`
-- Databricks workspace notebooks generated during smoke runs
-- Databricks secret scopes
-- `.memory/` artifacts
+- Databricks smoke notebooks or secret scopes
+- `.memory/` outputs
+- internal library crates as standalone public packages
 
-## Future Follow-up
+## Follow-up Candidates
 
-A dedicated release PR can decide:
+Not in the first release slice:
 
-- binary target matrix
-- container image naming/versioning
-- whether the library crates are internal-only or published
-- whether Databricks assets should be bundled separately from the binary release
+- wider platform matrix beyond `linux-amd64`
+- container images for the S3/export runtime
+- separate packaging for Databricks-native assets

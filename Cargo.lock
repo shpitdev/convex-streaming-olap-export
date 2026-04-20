@@ -867,7 +867,7 @@ dependencies = [
 
 [[package]]
 name = "convex-cdc-core"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "arrow-schema",
  "clap",
@@ -886,7 +886,7 @@ dependencies = [
 
 [[package]]
 name = "convex-sync"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "clap",
  "convex-cdc-core",
@@ -898,7 +898,7 @@ dependencies = [
 
 [[package]]
 name = "convex-target-s3"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "arrow-array",
  "arrow-schema",

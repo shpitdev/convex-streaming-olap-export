@@ -22,31 +22,33 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@v2
       - name: Run rustfmt
-        run: cargo fmt --check
+        run: cargo fmt --all --check
   clippy:
     name: Clippy
     runs-on: depot-ubuntu-24.04 # was: ubuntu-24.04. Mapped standard GitHub runner to Depot equivalent.
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Depot
+        uses: depot/setup-action@v1
+      - name: Install sccache
+        run: sudo apt-get update && sudo apt-get install -y sccache
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@v2
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: depot cargo clippy --workspace --all-targets --all-features -- -D warnings
   test:
     name: Test
     runs-on: depot-ubuntu-24.04 # was: ubuntu-24.04. Mapped standard GitHub runner to Depot equivalent.
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Depot
+        uses: depot/setup-action@v1
+      - name: Install sccache
+        run: sudo apt-get update && sudo apt-get install -y sccache
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@v2
       - name: Run tests
-        run: cargo test
+        run: depot cargo test --workspace
