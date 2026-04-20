@@ -9,7 +9,7 @@
     "cargo-workspace"
   ],
   "packages": {
-    ".": {
+    "apps/convex-sync": {
       "release-type": "rust",
       "package-name": "convex-sync",
       "changelog-path": "CHANGELOG.md",
