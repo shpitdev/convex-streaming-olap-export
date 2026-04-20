@@ -24,8 +24,8 @@ extraction model:
 flowchart TD
   Root[convex-streaming-olap-export]
   CLI[apps/convex-sync]
-  Core[crates/convex-cdc-core]
-  S3[crates/convex-target-s3]
+  Core[crates/convex-sync-core]
+  S3[crates/convex-export-s3]
   AWS[platform/aws]
   DBS3[platform/databricks/s3]
   DBN[platform/databricks/native]
@@ -40,8 +40,8 @@ flowchart TD
 Read the repo by layer:
 
 - [`apps/convex-sync/README.md`](apps/convex-sync/README.md): CLI surface and S3/export runtime commands
-- `crates/convex-cdc-core/`: shared Convex client, checkpoint FSM, event normalization, sync engine
-- `crates/convex-target-s3/`: raw parquet sink, staging materialization, S3 publish flow
+- `crates/convex-sync-core/`: shared Convex client, checkpoint FSM, event normalization, sync engine
+- `crates/convex-export-s3/`: raw parquet sink, staging materialization, S3 publish flow
 - [`platform/aws/README.md`](platform/aws/README.md): AWS assets for publishing and downstream readers
 - [`platform/databricks/README.md`](platform/databricks/README.md): Databricks target family overview
 - [`platform/databricks/s3/README.md`](platform/databricks/s3/README.md): Databricks consuming the S3 export path

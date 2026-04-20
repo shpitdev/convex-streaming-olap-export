@@ -5,11 +5,18 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
-use convex_cdc_core::{
+use convex_export_s3::{
+    publish::{publish_staging_to_s3, PublishS3Options},
+    service::{run_service, RunOptions},
+    sink::parquet::ParquetRawChangeLogWriter,
+    staging::materialize::{MaterializeStagingOptions, StagingMaterializer},
+};
+use convex_sync_core::{
     config::{ConvexConnectionConfig, OutputConfig, OutputFormat},
     convex::{client::ConvexClient, schemas::JsonSchemasQuery},
     errors::AppResult,
     model::schema::SchemaCatalog,
+    output::{write_jsonl_stream, write_value},
     state::checkpoint_store::FileCheckpointStore,
     sync::{
         delta_sync::{fetch_delta_events, DeltaSyncOptions},
@@ -17,15 +24,6 @@ use convex_cdc_core::{
         snapshot_sync::{fetch_snapshot_events, SnapshotSyncOptions},
     },
     telemetry::{logging, metrics},
-};
-use convex_target_s3::{
-    publish::{publish_staging_to_s3, PublishS3Options},
-    service::{run_service, RunOptions},
-    sink::{
-        jsonl::{write_jsonl_stream, write_value},
-        parquet::ParquetRawChangeLogWriter,
-    },
-    staging::materialize::{MaterializeStagingOptions, StagingMaterializer},
 };
 use url::Url;
 
@@ -246,7 +244,7 @@ async fn handle_snapshot(client: &ConvexClient, args: SnapshotArgs) -> AppResult
     let mut writer = open_writer(&output)?;
     if args.raw {
         let response = client
-            .list_snapshot(&convex_cdc_core::convex::snapshot::ListSnapshotQuery {
+            .list_snapshot(&convex_sync_core::convex::snapshot::ListSnapshotQuery {
                 snapshot: args.snapshot,
                 cursor: args.cursor,
                 table_name: args.table_name,
@@ -287,7 +285,7 @@ async fn handle_deltas(client: &ConvexClient, args: DeltasArgs) -> AppResult<()>
     let mut writer = open_writer(&output)?;
     if args.raw {
         let response = client
-            .document_deltas(&convex_cdc_core::convex::deltas::DocumentDeltasQuery {
+            .document_deltas(&convex_sync_core::convex::deltas::DocumentDeltasQuery {
                 cursor: args.cursor,
                 table_name: args.table_name,
             })
@@ -394,10 +392,10 @@ async fn load_schema_catalog(client: &ConvexClient) -> AppResult<SchemaCatalog> 
 
 fn build_client(connection: &ConnectionArgs) -> AppResult<ConvexClient> {
     let deployment_url = connection.deployment_url.clone().ok_or(
-        convex_cdc_core::errors::AppError::MissingRequiredConfig("CONVEX_DEPLOYMENT_URL"),
+        convex_sync_core::errors::AppError::MissingRequiredConfig("CONVEX_DEPLOYMENT_URL"),
     )?;
     let deploy_key = connection.deploy_key.clone().ok_or(
-        convex_cdc_core::errors::AppError::MissingRequiredConfig("CONVEX_DEPLOY_KEY"),
+        convex_sync_core::errors::AppError::MissingRequiredConfig("CONVEX_DEPLOY_KEY"),
     )?;
     ConvexClient::new(ConvexConnectionConfig::new(deployment_url, deploy_key)?)
 }

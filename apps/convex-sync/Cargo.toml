@@ -11,8 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
-convex-cdc-core = { path = "../../crates/convex-cdc-core" }
-convex-target-s3 = { path = "../../crates/convex-target-s3" }
+convex-sync-core = { path = "../../crates/convex-sync-core" }
+convex-export-s3 = { path = "../../crates/convex-export-s3" }
 dotenvy.workspace = true
 tokio.workspace = true
 url.workspace = true
