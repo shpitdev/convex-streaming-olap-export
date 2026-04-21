@@ -1,13 +1,13 @@
 databricks_profile     = "DEFAULT"
 databricks_config_file = "~/.databrickscfg"
 
-aws_role_arn             = "arn:aws:iam::123456789012:role/example-convex-streaming-olap-export-databricks-prod-reader"
-storage_credential_name  = "example-aws-s3-convex-streaming-olap-export"
-external_location_name   = "example-s3-convex-streaming-olap-export"
-external_location_url    = "s3://example-convex-streaming-olap-export-bucket/prod/staging/current/"
+aws_role_arn             = "arn:aws:iam::123456789012:role/example-convex-sync-kit-databricks-prod-reader"
+storage_credential_name  = "example-aws-s3-convex-sync-kit"
+external_location_name   = "example-s3-convex-sync-kit"
+external_location_url    = "s3://example-convex-sync-kit-bucket/prod/staging/current/"
 
-storage_credential_comment = "AWS S3 access for convex-streaming-olap-export"
-external_location_comment  = "AWS S3 external location for convex-streaming-olap-export"
+storage_credential_comment = "AWS S3 access for convex-sync-kit"
+external_location_comment  = "AWS S3 external location for convex-sync-kit"
 
 storage_credential_read_only = true
 external_location_read_only  = true

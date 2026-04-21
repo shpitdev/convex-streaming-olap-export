@@ -1,11 +1,17 @@
 bundle:
-  name: convex-streaming-olap-export-delta
+  name: convex-sync-kit-delta
   uuid: 2d5d8d8e-cdb2-41e4-bc7e-7ffae07f628d
 
 include:
   - resources/*.yml
 
 variables:
+  source_slug:
+    description: Stable source slug used for deployment names and workspace paths.
+  deployment_slug:
+    description: Unique deployment slug for this source and target environment.
+  job_name:
+    description: Databricks job name for the extractor deployment.
   convex_deployment_url:
     description: Convex deployment root URL.
   convex_deploy_key_secret_scope:
@@ -31,25 +37,33 @@ targets:
     default: true
     workspace:
       profile: DEFAULT
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${var.deployment_slug}
     variables:
-      convex_deploy_key_secret_scope: convex-streaming-olap-export
+      source_slug: meshix-api
+      deployment_slug: meshix-api-dev
+      job_name: convex-sync-kit-meshix-api-dev-delta-extract
+      convex_deploy_key_secret_scope: convex-sync-kit-meshix-api
       convex_deploy_key_secret_key: convex-deploy-key
-      source_id: convex-streaming-olap-export-dev
+      source_id: meshix-api-dev
       table_name: ""
       catalog: workspace
-      control_schema: convex_streaming_olap_export_control
-      bronze_schema: convex_streaming_olap_export_bronze
+      control_schema: convex_sync_kit_meshix_api_delta_control
+      bronze_schema: convex_sync_kit_meshix_api_delta_bronze
       checkpoint_table: connector_checkpoint
   prod:
     mode: production
     workspace:
       profile: DEFAULT
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${var.deployment_slug}
     variables:
-      convex_deploy_key_secret_scope: convex-streaming-olap-export
+      source_slug: meshix-api
+      deployment_slug: meshix-api-prod
+      job_name: convex-sync-kit-meshix-api-prod-delta-extract
+      convex_deploy_key_secret_scope: convex-sync-kit-meshix-api
       convex_deploy_key_secret_key: convex-deploy-key
-      source_id: convex-streaming-olap-export
+      source_id: meshix-api
       table_name: ""
       catalog: workspace
-      control_schema: convex_streaming_olap_export_control
-      bronze_schema: convex_streaming_olap_export_bronze
+      control_schema: convex_sync_kit_meshix_api_delta_control
+      bronze_schema: convex_sync_kit_meshix_api_delta_bronze
       checkpoint_table: connector_checkpoint

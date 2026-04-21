@@ -38,6 +38,7 @@ cannot overwrite key, ordering, or delete semantics.
 Bundle lifecycle:
 
 - `scripts/ensure-databricks-delta-secret.sh <profile> [scope] [key]`
+- `scripts/bootstrap-databricks-delta.sh <profile> <warehouse_id>`
 - `scripts/deploy-databricks-delta.sh <profile> <target>`
 - `scripts/run-databricks-delta-job.sh <profile> <target> [job_key]`
 - `scripts/run-databricks-delta-smoke.sh <profile> <target> <warehouse_id>`
@@ -57,8 +58,21 @@ variable.
 
 Helper defaults:
 
-- `DATABRICKS_DELTA_SECRET_SCOPE=convex-streaming-olap-export`
+- `DATABRICKS_DELTA_SECRET_SCOPE=convex-sync-kit-meshix-api`
 - `DATABRICKS_DELTA_SECRET_KEY=convex-deploy-key`
+
+Source-aware defaults come from `sources/<slug>/env.sh`. The current checked-in
+profile is `sources/meshix-api/env.sh`.
+
+Recommended long-lived naming:
+
+- `convex_sync_kit_<source>_delta_control`
+- `convex_sync_kit_<source>_delta_bronze`
+- `convex_sync_kit_<source>_delta_silver`
+
+The Databricks bundle also uses a source-specific deployment slug so multiple
+Convex sources can coexist in one workspace without clobbering each other's
+bundle state or extractor job names.
 
 If `CONVEX_DEPLOY_KEY` is available locally, the deploy and run helpers will
 create or update that Databricks secret automatically before validating,
@@ -68,6 +82,7 @@ require the target Databricks secret to already exist.
 Bootstrap SQL can still be applied directly with:
 
 - `scripts/apply-databricks-sql-dir.sh <profile> <warehouse_id> <rendered_sql_dir>`
+- `scripts/bootstrap-databricks-delta.sh <profile> <warehouse_id>`
 
 The extractor mirrors the Rust source/checkpoint logic and does not depend on
 the local parquet/S3 path.
@@ -89,6 +104,7 @@ Recommended operator entrypoints:
 
 ```bash
 just databricks-delta-sync-secret
+just databricks-delta-bootstrap <warehouse_id>
 just databricks-delta-deploy
 just databricks-delta-run
 just databricks-delta-smoke <warehouse_id>

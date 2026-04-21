@@ -11,6 +11,9 @@ scope_arg="${2:-}"
 key_arg="${3:-}"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=/dev/null
+source "$repo_root/scripts/load-source-config.sh"
+load_convex_sync_source_config "$repo_root"
 
 read_env_file_value() {
   local key="$1"
@@ -26,7 +29,7 @@ read_env_file_value() {
   printf '%s' "${line#*=}"
 }
 
-scope="${scope_arg:-${DATABRICKS_DELTA_SECRET_SCOPE:-convex-streaming-olap-export}}"
+scope="${scope_arg:-${DATABRICKS_DELTA_SECRET_SCOPE:-convex-sync-kit}}"
 key="${key_arg:-${DATABRICKS_DELTA_SECRET_KEY:-convex-deploy-key}}"
 deploy_key="${CONVEX_DEPLOY_KEY:-$(read_env_file_value CONVEX_DEPLOY_KEY || true)}"
 

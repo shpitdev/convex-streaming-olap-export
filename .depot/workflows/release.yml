@@ -14,8 +14,8 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
-      release_created: ${{ steps.release.outputs['apps/convex-sync--release_created'] }}
-      tag_name: ${{ steps.release.outputs['apps/convex-sync--tag_name'] }}
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
       paths_released: ${{ steps.release.outputs.paths_released }}
     steps:
       - name: run-release-please

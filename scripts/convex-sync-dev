@@ -17,7 +17,7 @@ repo_root="$(cd -- "${script_dir}/.." >/dev/null 2>&1 && pwd)"
 binary_path="${repo_root}/target/debug/convex-sync"
 
 if [[ ! -f "${repo_root}/Cargo.toml" || ! -f "${repo_root}/apps/convex-sync/src/main.rs" ]]; then
-  printf 'convex-sync-dev must run from a convex-streaming-olap-export checkout\n' >&2
+  printf 'convex-sync-dev must run from a convex-sync-kit checkout\n' >&2
   exit 1
 fi
 

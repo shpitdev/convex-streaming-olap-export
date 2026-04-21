@@ -2,11 +2,16 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=/dev/null
+source "$repo_root/scripts/load-source-config.sh"
+load_convex_sync_source_config "$repo_root"
 
 profile="${DATABRICKS_PROFILE:-DEFAULT}"
 warehouse_id="${DATABRICKS_WAREHOUSE_ID:-}"
 catalog="${DATABRICKS_CATALOG:-workspace}"
-schema="${DATABRICKS_SCHEMA:-convex_streaming_olap_export}"
+source_slug="${CONVEX_SYNC_SOURCE_SLUG:-default}"
+source_slug_sql="${CONVEX_SYNC_SOURCE_SQL:-${source_slug//-/_}}"
+schema="${DATABRICKS_SCHEMA:-${DATABRICKS_S3_SCHEMA:-convex_sync_kit_${source_slug_sql}_s3}}"
 bucket="${S3_BUCKET:-}"
 prefix="${S3_PREFIX:-}"
 label="${LABEL:-sync}"

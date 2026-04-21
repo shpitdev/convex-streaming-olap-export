@@ -1,4 +1,4 @@
-# convex-streaming-olap-export
+# convex-sync-kit
 
 - `Language`: ![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
 - `Source`: ![Convex](https://img.shields.io/badge/Convex-EE342F?logo=convex&logoColor=white)
@@ -22,7 +22,7 @@ extraction model:
 
 ```mermaid
 flowchart TD
-  Root[convex-streaming-olap-export]
+  Root[convex-sync-kit]
   Inspect[apps/convex-inspect]
   CLI[apps/convex-sync]
   Core[crates/convex-sync-core]
@@ -49,13 +49,14 @@ Read the repo by layer:
 - [`platform/databricks/README.md`](platform/databricks/README.md): Databricks target family overview
 - [`platform/databricks/s3/README.md`](platform/databricks/s3/README.md): Databricks consuming the S3 export path
 - [`platform/databricks/delta/README.md`](platform/databricks/delta/README.md): Databricks Delta bronze/silver landing
+- [`sources/README.md`](sources/README.md): source-specific defaults layered on top of the shared engine
 
 ## Install
 
 Release install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/shpitdev/convex-streaming-olap-export/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/shpitdev/convex-sync-kit/main/install.sh | bash
 ```
 
 Local checkout dev install:
@@ -72,6 +73,17 @@ Current release coverage:
 - release installs go to `~/.local/share/convex-sync/<version>/convex-sync`
 - command symlinks go in `~/.local/bin`
 - `convex-inspect` is repo-local today and not part of the release artifact
+
+## Source Configs
+
+The repo name stays generic. Source-specific defaults live under `sources/`.
+
+- current source profile: `sources/meshix-api/env.sh`
+- activate a source by setting `CONVEX_SYNC_SOURCE=<slug>`
+- explicit env vars still win over source defaults
+
+This is the intended scaling model for running the same engine against many
+Convex projects without forking the repo or renaming the binaries.
 
 ## Operator Binaries
 
@@ -145,9 +157,17 @@ Runtime split:
 Packaged entrypoints:
 
 - `just databricks-delta-sync-secret`
+- `just databricks-delta-bootstrap <warehouse_id>`
 - `just databricks-delta-deploy`
 - `just databricks-delta-run`
 - `just databricks-delta-smoke <warehouse_id>`
+
+Recommended production naming:
+
+- S3-backed Databricks schema: `convex_sync_kit_<source>_s3`
+- Delta control schema: `convex_sync_kit_<source>_delta_control`
+- Delta bronze schema: `convex_sync_kit_<source>_delta_bronze`
+- Delta silver schema: `convex_sync_kit_<source>_delta_silver`
 
 ### `Databricks over S3`
 
@@ -199,7 +219,7 @@ Stable releases are driven by merged PR titles on `main`.
 
 - use conventional PR titles such as `feat: ...`, `fix: ...`, or `deps: ...`
 - `release-please` now starts release history from commit `0cf9f47`
-- merge to `main` opens or advances the stable release PR automatically when a releasable PR lands
+- merge to `main` opens or advances the stable release PR automatically when a releasable PR lands anywhere the repo-wide release config considers in scope
 - both release workflows also support manual `workflow_dispatch`, so there is always a button path in GitHub Actions
 
 ## References

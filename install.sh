@@ -3,7 +3,7 @@ set -euo pipefail
 
 BINARY_NAME="convex-sync"
 DEV_BINARY_NAME="${CONVEX_SYNC_DEV_BIN_NAME:-convex-sync-dev}"
-REPO="shpitdev/convex-streaming-olap-export"
+REPO="shpitdev/convex-sync-kit"
 
 VERSION="${CONVEX_SYNC_VERSION:-latest}"
 INSTALL_MODE="${CONVEX_SYNC_INSTALL_MODE:-auto}"
