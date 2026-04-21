@@ -1,0 +1,10 @@
+{
+  "dashboards": [
+    {
+      "key": "convex_sync_overview",
+      "display_name": "Convex Sync Overview",
+      "template_file": "platform/databricks/delta/dashboards/convex_sync_overview.lvdash.json.tmpl",
+      "purpose": "Checkpoint freshness, bronze coverage, and silver readiness for a single Convex source."
+    }
+  ]
+}

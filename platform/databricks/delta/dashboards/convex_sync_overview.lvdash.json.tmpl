@@ -1,0 +1,536 @@
+{
+  "datasets": [
+    {
+      "name": "sync_summary",
+      "displayName": "Sync Summary",
+      "config": {
+        "source": "WITH checkpoint_latest AS ( SELECT source_id, phase, updated_at FROM `{{CATALOG}}`.`{{CONTROL_SCHEMA}}`.connector_checkpoint_latest ), checkpoint_counts AS ( SELECT source_id, COUNT(*) AS checkpoint_write_count FROM `{{CATALOG}}`.`{{CONTROL_SCHEMA}}`.`{{CHECKPOINT_TABLE}}` GROUP BY source_id ), bronze_tables AS ( SELECT COUNT(*) AS bronze_table_count FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema = '{{BRONZE_SCHEMA}}' ), silver_tables AS ( SELECT COUNT(*) AS silver_table_count FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema = '{{SILVER_SCHEMA}}' ) SELECT l.source_id, l.phase, l.updated_at, ROUND((UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) - UNIX_TIMESTAMP(l.updated_at)) / 60.0, 2) AS checkpoint_lag_minutes, COALESCE(c.checkpoint_write_count, 0) AS checkpoint_write_count, b.bronze_table_count, s.silver_table_count FROM checkpoint_latest l LEFT JOIN checkpoint_counts c ON c.source_id = l.source_id CROSS JOIN bronze_tables b CROSS JOIN silver_tables s",
+        "measures": [
+          {
+            "name": "Bronze Tables",
+            "expr": "MAX(bronze_table_count)",
+            "displayName": "Bronze Tables",
+            "format": {
+              "type": "number",
+              "decimalPlaces": {
+                "type": "exact",
+                "places": 0
+              }
+            }
+          },
+          {
+            "name": "Silver Tables",
+            "expr": "MAX(silver_table_count)",
+            "displayName": "Silver Tables",
+            "format": {
+              "type": "number",
+              "decimalPlaces": {
+                "type": "exact",
+                "places": 0
+              }
+            }
+          },
+          {
+            "name": "Checkpoint Lag Minutes",
+            "expr": "MAX(checkpoint_lag_minutes)",
+            "displayName": "Checkpoint Lag Minutes",
+            "format": {
+              "type": "number",
+              "decimalPlaces": {
+                "type": "exact",
+                "places": 2
+              }
+            }
+          },
+          {
+            "name": "Checkpoint Writes",
+            "expr": "MAX(checkpoint_write_count)",
+            "displayName": "Checkpoint Writes",
+            "format": {
+              "type": "number",
+              "decimalPlaces": {
+                "type": "exact",
+                "places": 0
+              }
+            }
+          }
+        ],
+        "dimensions": [
+          {
+            "name": "Source ID",
+            "expr": "source_id",
+            "displayName": "Source ID"
+          },
+          {
+            "name": "Phase",
+            "expr": "phase",
+            "displayName": "Phase"
+          },
+          {
+            "name": "Updated At",
+            "expr": "updated_at",
+            "displayName": "Updated At"
+          }
+        ],
+        "version": 1.1,
+        "comment": "High-level sync summary for {{SOURCE_LABEL}}."
+      }
+    },
+    {
+      "name": "recent_checkpoints",
+      "displayName": "Recent Checkpoints",
+      "config": {
+        "source": "SELECT source_id, phase, snapshot_ts, delta_cursor, run_id, updated_at FROM `{{CATALOG}}`.`{{CONTROL_SCHEMA}}`.`{{CHECKPOINT_TABLE}}` ORDER BY updated_at DESC LIMIT 50",
+        "dimensions": [
+          {
+            "name": "Source ID",
+            "expr": "source_id",
+            "displayName": "Source ID"
+          },
+          {
+            "name": "Phase",
+            "expr": "phase",
+            "displayName": "Phase"
+          },
+          {
+            "name": "Snapshot TS",
+            "expr": "snapshot_ts",
+            "displayName": "Snapshot TS"
+          },
+          {
+            "name": "Delta Cursor",
+            "expr": "delta_cursor",
+            "displayName": "Delta Cursor"
+          },
+          {
+            "name": "Run ID",
+            "expr": "run_id",
+            "displayName": "Run ID"
+          },
+          {
+            "name": "Updated At",
+            "expr": "updated_at",
+            "displayName": "Updated At"
+          }
+        ],
+        "version": 1.1,
+        "comment": "Recent checkpoint writes."
+      }
+    },
+    {
+      "name": "delta_table_inventory",
+      "displayName": "Delta Table Inventory",
+      "config": {
+        "source": "SELECT table_schema AS layer, table_name, table_type, created, last_altered FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema IN ('{{BRONZE_SCHEMA}}', '{{SILVER_SCHEMA}}') ORDER BY table_schema, table_name",
+        "dimensions": [
+          {
+            "name": "Layer",
+            "expr": "layer",
+            "displayName": "Layer"
+          },
+          {
+            "name": "Table Name",
+            "expr": "table_name",
+            "displayName": "Table Name"
+          },
+          {
+            "name": "Table Type",
+            "expr": "table_type",
+            "displayName": "Table Type"
+          },
+          {
+            "name": "Created",
+            "expr": "created",
+            "displayName": "Created"
+          },
+          {
+            "name": "Last Altered",
+            "expr": "last_altered",
+            "displayName": "Last Altered"
+          }
+        ],
+        "version": 1.1,
+        "comment": "Bronze and silver table inventory."
+      }
+    }
+  ],
+  "pages": [
+    {
+      "name": "convex_sync_overview",
+      "displayName": "Convex Sync Overview",
+      "layout": [
+        {
+          "widget": {
+            "name": "title_box",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Convex Sync Overview\n",
+                "High-level sync health for {{SOURCE_LABEL}}. Silver stays empty until you deploy a Lakeflow AUTO CDC pipeline."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "bronze_table_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sync_summary",
+                  "fields": [
+                    {
+                      "name": "measure(Bronze Tables)",
+                      "expression": "MEASURE(`Bronze Tables`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Bronze Tables)",
+                  "displayName": "Bronze Tables"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Bronze Tables"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "silver_table_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sync_summary",
+                  "fields": [
+                    {
+                      "name": "measure(Silver Tables)",
+                      "expression": "MEASURE(`Silver Tables`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Silver Tables)",
+                  "displayName": "Silver Tables"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Silver Tables"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "checkpoint_lag_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sync_summary",
+                  "fields": [
+                    {
+                      "name": "measure(Checkpoint Lag Minutes)",
+                      "expression": "MEASURE(`Checkpoint Lag Minutes`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Checkpoint Lag Minutes)",
+                  "displayName": "Checkpoint Lag Minutes"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Checkpoint Lag (min)"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "checkpoint_writes_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sync_summary",
+                  "fields": [
+                    {
+                      "name": "measure(Checkpoint Writes)",
+                      "expression": "MEASURE(`Checkpoint Writes`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Checkpoint Writes)",
+                  "displayName": "Checkpoint Writes"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Checkpoint Writes"
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "latest_status_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sync_summary",
+                  "fields": [
+                    {
+                      "name": "Source ID",
+                      "expression": "`Source ID`"
+                    },
+                    {
+                      "name": "Phase",
+                      "expression": "`Phase`"
+                    },
+                    {
+                      "name": "Updated At",
+                      "expression": "`Updated At`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "rowsPerPage": 5,
+              "frame": {
+                "showTitle": true,
+                "title": "Latest Checkpoint"
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Source ID",
+                    "displayName": "Source ID"
+                  },
+                  {
+                    "fieldName": "Phase",
+                    "displayName": "Phase"
+                  },
+                  {
+                    "fieldName": "Updated At",
+                    "displayName": "Updated At"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 5,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "recent_checkpoints_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "recent_checkpoints",
+                  "fields": [
+                    {
+                      "name": "Source ID",
+                      "expression": "`Source ID`"
+                    },
+                    {
+                      "name": "Phase",
+                      "expression": "`Phase`"
+                    },
+                    {
+                      "name": "Delta Cursor",
+                      "expression": "`Delta Cursor`"
+                    },
+                    {
+                      "name": "Updated At",
+                      "expression": "`Updated At`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "rowsPerPage": 10,
+              "frame": {
+                "showTitle": true,
+                "title": "Recent Checkpoints"
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Source ID",
+                    "displayName": "Source ID"
+                  },
+                  {
+                    "fieldName": "Phase",
+                    "displayName": "Phase"
+                  },
+                  {
+                    "fieldName": "Delta Cursor",
+                    "displayName": "Delta Cursor"
+                  },
+                  {
+                    "fieldName": "Updated At",
+                    "displayName": "Updated At"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 5,
+            "width": 7,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "table_inventory_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "delta_table_inventory",
+                  "fields": [
+                    {
+                      "name": "Layer",
+                      "expression": "`Layer`"
+                    },
+                    {
+                      "name": "Table Name",
+                      "expression": "`Table Name`"
+                    },
+                    {
+                      "name": "Table Type",
+                      "expression": "`Table Type`"
+                    },
+                    {
+                      "name": "Last Altered",
+                      "expression": "`Last Altered`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "rowsPerPage": 25,
+              "frame": {
+                "showTitle": true,
+                "title": "Bronze And Silver Inventory"
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Layer",
+                    "displayName": "Layer"
+                  },
+                  {
+                    "fieldName": "Table Name",
+                    "displayName": "Table Name"
+                  },
+                  {
+                    "fieldName": "Table Type",
+                    "displayName": "Table Type"
+                  },
+                  {
+                    "fieldName": "Last Altered",
+                    "displayName": "Last Altered"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 12,
+            "height": 10
+          }
+        }
+      ],
+      "pageType": "PAGE"
+    }
+  ]
+}

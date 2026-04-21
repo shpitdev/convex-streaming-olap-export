@@ -191,6 +191,26 @@ depot ci run --workflow .depot/workflows/release.yml
 depot ci run --workflow .depot/workflows/release-rc.yml
 ```
 
+## Monitoring
+
+The Delta path now has a Lakeview dashboard template and publish flow for a
+high-level sync view:
+
+```bash
+just databricks-delta-publish-dashboard DEFAULT <warehouse-id>
+```
+
+The first version focuses on:
+
+- latest checkpoint freshness
+- bronze table count
+- silver table count
+- recent checkpoint history
+- bronze and silver table inventory
+
+Silver remaining empty is expected until you deploy a real Lakeflow `AUTO CDC`
+pipeline that reads bronze and materializes silver.
+
 ## Suggested Screenshots
 
 If you want to show this repo working in a talk or video, start with:
@@ -212,6 +232,7 @@ There is a more detailed capture list in [docs/demo-storyboard.md](docs/demo-sto
 
 - [Ask DeepWiki about this repo](https://deepwiki.com/shpitdev/convex-sync-kit)
 - [docs/architecture.md](docs/architecture.md)
+- [docs/monitoring.md](docs/monitoring.md)
 - [docs/public-reference-map.md](docs/public-reference-map.md)
 - [docs/release-artifacts.md](docs/release-artifacts.md)
 - [docs/demo-storyboard.md](docs/demo-storyboard.md)
