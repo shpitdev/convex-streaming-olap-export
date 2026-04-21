@@ -101,9 +101,14 @@ flowchart LR
   J[convex_delta_extract job]
   C[checkpoint table]
   T[bronze CDC tables]
+  P[Lakeflow AUTO CDC pipeline]
+  S[silver current-state tables]
   B --> J
+  B --> P
   J --> C
   J --> T
+  T --> P
+  P --> S
 ```
 
 Recommended operator entrypoints:
@@ -112,12 +117,16 @@ Recommended operator entrypoints:
 just databricks-delta-sync-secret
 just databricks-delta-bootstrap <warehouse_id>
 just databricks-delta-publish-dashboard DEFAULT <warehouse_id>
+just databricks-delta-deploy DEFAULT prod
+just databricks-delta-run DEFAULT prod
 just databricks-delta-deploy-pipeline DEFAULT prod
 just databricks-delta-run-pipeline DEFAULT prod
-just databricks-delta-deploy
-just databricks-delta-run
 just databricks-delta-smoke <warehouse_id>
 ```
+
+The checked-in `meshix-api` example already has a generated bronze-to-silver
+Lakeflow SQL file under `generated/`. New sources render that file during the
+`deploy-pipeline` step once bronze tables exist.
 
 Auto-update behavior after deployment:
 
