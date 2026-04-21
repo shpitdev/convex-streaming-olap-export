@@ -5,6 +5,10 @@ bundle:
 include:
   - resources/*.yml
 
+sync:
+  include:
+    - generated/*.sql
+
 variables:
   source_slug:
     description: Stable source slug used for deployment names and workspace paths.
@@ -28,8 +32,14 @@ variables:
     description: Schema that owns the checkpoint table.
   bronze_schema:
     description: Schema that owns bronze CDC tables.
+  silver_schema:
+    description: Schema that owns silver current-state tables.
   checkpoint_table:
     description: Checkpoint table name.
+  autocdc_pipeline_name:
+    description: Databricks Lakeflow pipeline name for bronze-to-silver AUTO CDC.
+  autocdc_pipeline_file:
+    description: Generated SQL file name for the Lakeflow AUTO CDC pipeline.
 
 targets:
   dev:
@@ -49,7 +59,10 @@ targets:
       catalog: workspace
       control_schema: convex_sync_kit_meshix_api_delta_control
       bronze_schema: convex_sync_kit_meshix_api_delta_bronze
+      silver_schema: convex_sync_kit_meshix_api_delta_silver
       checkpoint_table: connector_checkpoint
+      autocdc_pipeline_name: convex-sync-kit-meshix-api-dev-autocdc
+      autocdc_pipeline_file: meshix-api-dev-bronze-to-silver.sql
   prod:
     mode: production
     workspace:
@@ -66,4 +79,7 @@ targets:
       catalog: workspace
       control_schema: convex_sync_kit_meshix_api_delta_control
       bronze_schema: convex_sync_kit_meshix_api_delta_bronze
+      silver_schema: convex_sync_kit_meshix_api_delta_silver
       checkpoint_table: connector_checkpoint
+      autocdc_pipeline_name: convex-sync-kit-meshix-api-prod-autocdc
+      autocdc_pipeline_file: meshix-api-prod-bronze-to-silver.sql

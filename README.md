@@ -105,6 +105,11 @@ The Delta path creates and updates:
 
 The silver schema is expected to stay empty until you stand up a Lakeflow `AUTO CDC` pipeline for the tables you actually want to materialize there.
 
+```bash
+just databricks-delta-deploy-pipeline DEFAULT prod
+just databricks-delta-run-pipeline DEFAULT prod
+```
+
 Reference Databricks over S3 flow:
 
 ```bash

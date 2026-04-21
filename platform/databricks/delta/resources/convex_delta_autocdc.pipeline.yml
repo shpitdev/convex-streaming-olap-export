@@ -1,0 +1,13 @@
+resources:
+  pipelines:
+    convex_delta_autocdc:
+      name: ${var.autocdc_pipeline_name}
+      catalog: ${var.catalog}
+      schema: ${var.silver_schema}
+      serverless: true
+      photon: true
+      continuous: false
+      root_path: ${workspace.file_path}
+      libraries:
+        - file:
+            path: ${workspace.file_path}/generated/${var.autocdc_pipeline_file}

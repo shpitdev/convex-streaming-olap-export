@@ -48,7 +48,10 @@ secret_key="${DATABRICKS_DELTA_SECRET_KEY:-convex-deploy-key}"
 catalog="${DATABRICKS_DELTA_CATALOG:-workspace}"
 control_schema="${DATABRICKS_DELTA_CONTROL_SCHEMA:-convex_sync_kit_${source_slug_sql}_delta_control}"
 bronze_schema="${DATABRICKS_DELTA_BRONZE_SCHEMA:-convex_sync_kit_${source_slug_sql}_delta_bronze}"
+silver_schema="${DATABRICKS_DELTA_SILVER_SCHEMA:-convex_sync_kit_${source_slug_sql}_delta_silver}"
 checkpoint_table="${DATABRICKS_DELTA_CHECKPOINT_TABLE:-connector_checkpoint}"
+pipeline_name="${DATABRICKS_DELTA_AUTOCDC_PIPELINE_NAME:-convex-sync-kit-${deployment_slug}-autocdc}"
+pipeline_file="${DATABRICKS_DELTA_AUTOCDC_PIPELINE_FILE:-${deployment_slug}-bronze-to-silver.sql}"
 
 "$repo_root/scripts/ensure-databricks-delta-secret.sh" "$profile" "$secret_scope" "$secret_key"
 
@@ -64,7 +67,10 @@ bundle_args=(
   --var "catalog=$catalog"
   --var "control_schema=$control_schema"
   --var "bronze_schema=$bronze_schema"
+  --var "silver_schema=$silver_schema"
   --var "checkpoint_table=$checkpoint_table"
+  --var "autocdc_pipeline_name=$pipeline_name"
+  --var "autocdc_pipeline_file=$pipeline_file"
 )
 
 (

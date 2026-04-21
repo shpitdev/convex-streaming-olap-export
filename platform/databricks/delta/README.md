@@ -42,6 +42,9 @@ Bundle lifecycle:
 - `scripts/bootstrap-databricks-delta.sh <profile> <warehouse_id>`
 - `scripts/render-databricks-delta-dashboard.sh <output_file>`
 - `scripts/publish-databricks-delta-dashboard.sh <profile> <warehouse_id> [dashboard_id]`
+- `scripts/render-databricks-delta-pipeline.sh <profile> <output_file>`
+- `scripts/deploy-databricks-delta-pipeline.sh <profile> <target>`
+- `scripts/run-databricks-delta-pipeline.sh <profile> <target>`
 - `scripts/deploy-databricks-delta.sh <profile> <target>`
 - `scripts/run-databricks-delta-job.sh <profile> <target> [job_key]`
 - `scripts/run-databricks-delta-smoke.sh <profile> <target> <warehouse_id>`
@@ -109,6 +112,8 @@ Recommended operator entrypoints:
 just databricks-delta-sync-secret
 just databricks-delta-bootstrap <warehouse_id>
 just databricks-delta-publish-dashboard DEFAULT <warehouse_id>
+just databricks-delta-deploy-pipeline DEFAULT prod
+just databricks-delta-run-pipeline DEFAULT prod
 just databricks-delta-deploy
 just databricks-delta-run
 just databricks-delta-smoke <warehouse_id>
