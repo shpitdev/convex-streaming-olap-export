@@ -16,7 +16,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo_root/scripts/load-source-config.sh"
 load_convex_sync_source_config "$repo_root"
 
-source_slug="${CONVEX_SYNC_SOURCE_SLUG:-${CONVEX_SYNC_SOURCE:-default}}"
+source_slug="${CONVEX_SYNC_SOURCE_SLUG:-default}"
 source_label="${CONVEX_SYNC_SOURCE_LABEL:-$source_slug}"
 display_name="${DATABRICKS_DELTA_DASHBOARD_NAME:-Convex Sync Overview (${source_label})}"
 

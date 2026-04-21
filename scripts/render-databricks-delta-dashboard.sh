@@ -14,7 +14,7 @@ source "$repo_root/scripts/load-source-config.sh"
 load_convex_sync_source_config "$repo_root"
 
 catalog="${DATABRICKS_DELTA_CATALOG:-workspace}"
-source_slug="${CONVEX_SYNC_SOURCE_SLUG:-${CONVEX_SYNC_SOURCE:-default}}"
+source_slug="${CONVEX_SYNC_SOURCE_SLUG:-default}"
 source_slug_sql="${CONVEX_SYNC_SOURCE_SQL:-${source_slug//-/_}}"
 control_schema="${DATABRICKS_DELTA_CONTROL_SCHEMA:-convex_sync_kit_${source_slug_sql}_delta_control}"
 bronze_schema="${DATABRICKS_DELTA_BRONZE_SCHEMA:-convex_sync_kit_${source_slug_sql}_delta_bronze}"
