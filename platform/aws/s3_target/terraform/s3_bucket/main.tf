@@ -9,7 +9,7 @@ resource "aws_s3_bucket" "this" {
     {
       Name      = var.bucket_name
       ManagedBy = "terraform"
-      Repo      = "convex-streaming-olap-export"
+      Repo      = "convex-sync-kit"
     },
     var.tags,
   )

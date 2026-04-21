@@ -78,6 +78,9 @@ databricks-apply-sql-dir profile warehouse_id sql_dir:
 databricks-delta-sync-secret *args:
   ./scripts/ensure-databricks-delta-secret.sh {{args}}
 
+databricks-delta-bootstrap warehouse_id profile="DEFAULT":
+  ./scripts/bootstrap-databricks-delta.sh {{profile}} {{warehouse_id}}
+
 databricks-delta-deploy profile="DEFAULT" target="dev":
   ./scripts/deploy-databricks-delta.sh {{profile}} {{target}}
 

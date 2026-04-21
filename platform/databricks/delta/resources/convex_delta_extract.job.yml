@@ -1,7 +1,7 @@
 resources:
   jobs:
     convex_delta_extract:
-      name: convex-delta-extract
+      name: ${var.job_name}
       max_concurrent_runs: 1
       tasks:
         - task_key: convex_delta_extract

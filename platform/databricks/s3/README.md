@@ -26,6 +26,13 @@ flowchart LR
 The published `staging/current` prefix must be covered by a Unity Catalog
 external location before the view sync is applied.
 
+Recommended long-lived schema naming:
+
+- `convex_sync_kit_<source>_s3`
+
+The current checked-in source profile is `sources/meshix-api/env.sh`, which
+sets `DATABRICKS_S3_SCHEMA=convex_sync_kit_meshix_api_s3`.
+
 Recommended entrypoint:
 
 ```bash

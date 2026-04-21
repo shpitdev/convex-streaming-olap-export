@@ -1,0 +1,27 @@
+: "${CONVEX_SYNC_SOURCE:=meshix-api}"
+: "${CONVEX_SYNC_SOURCE_SLUG:=meshix-api}"
+: "${CONVEX_SYNC_SOURCE_SQL:=meshix_api}"
+: "${CONVEX_SOURCE_ID:=meshix-api}"
+
+: "${DATABRICKS_S3_SCHEMA:=convex_sync_kit_meshix_api_s3}"
+
+: "${DATABRICKS_DELTA_SECRET_SCOPE:=convex-sync-kit-meshix-api}"
+: "${DATABRICKS_DELTA_SECRET_KEY:=convex-deploy-key}"
+: "${DATABRICKS_DELTA_CATALOG:=workspace}"
+: "${DATABRICKS_DELTA_CONTROL_SCHEMA:=convex_sync_kit_meshix_api_delta_control}"
+: "${DATABRICKS_DELTA_BRONZE_SCHEMA:=convex_sync_kit_meshix_api_delta_bronze}"
+: "${DATABRICKS_DELTA_SILVER_SCHEMA:=convex_sync_kit_meshix_api_delta_silver}"
+: "${DATABRICKS_DELTA_CHECKPOINT_TABLE:=connector_checkpoint}"
+
+export CONVEX_SYNC_SOURCE
+export CONVEX_SYNC_SOURCE_SLUG
+export CONVEX_SYNC_SOURCE_SQL
+export CONVEX_SOURCE_ID
+export DATABRICKS_S3_SCHEMA
+export DATABRICKS_DELTA_SECRET_SCOPE
+export DATABRICKS_DELTA_SECRET_KEY
+export DATABRICKS_DELTA_CATALOG
+export DATABRICKS_DELTA_CONTROL_SCHEMA
+export DATABRICKS_DELTA_BRONZE_SCHEMA
+export DATABRICKS_DELTA_SILVER_SCHEMA
+export DATABRICKS_DELTA_CHECKPOINT_TABLE

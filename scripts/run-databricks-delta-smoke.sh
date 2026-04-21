@@ -11,17 +11,20 @@ target="$2"
 warehouse_id="$3"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-bootstrap_src="$repo_root/platform/databricks/delta/sql/bootstrap"
-render_dir="$(mktemp -d)"
+# shellcheck source=/dev/null
+source "$repo_root/scripts/load-source-config.sh"
+load_convex_sync_source_config "$repo_root"
 timestamp="$(date +%Y%m%d%H%M%S)"
 
 catalog="${DATABRICKS_DELTA_CATALOG:-workspace}"
-control_schema="${DATABRICKS_DELTA_CONTROL_SCHEMA:-convex_streaming_olap_export_delta_smoke_${timestamp}_control}"
-bronze_schema="${DATABRICKS_DELTA_BRONZE_SCHEMA:-convex_streaming_olap_export_delta_smoke_${timestamp}_bronze}"
-silver_schema="${DATABRICKS_DELTA_SILVER_SCHEMA:-convex_streaming_olap_export_delta_smoke_${timestamp}_silver}"
+source_slug="${CONVEX_SYNC_SOURCE_SLUG:-default}"
+source_slug_sql="${CONVEX_SYNC_SOURCE_SQL:-${source_slug//-/_}}"
+control_schema="${DATABRICKS_DELTA_CONTROL_SCHEMA:-convex_sync_kit_${source_slug_sql}_delta_smoke_${timestamp}_control}"
+bronze_schema="${DATABRICKS_DELTA_BRONZE_SCHEMA:-convex_sync_kit_${source_slug_sql}_delta_smoke_${timestamp}_bronze}"
+silver_schema="${DATABRICKS_DELTA_SILVER_SCHEMA:-convex_sync_kit_${source_slug_sql}_delta_smoke_${timestamp}_silver}"
 checkpoint_table="${DATABRICKS_DELTA_CHECKPOINT_TABLE:-connector_checkpoint}"
 table_name="${CONVEX_TABLE_NAME:-jobs}"
-source_id="${CONVEX_SOURCE_ID:-convex-streaming-olap-export-delta-smoke}"
+source_id="${CONVEX_SOURCE_ID:-${source_slug}-delta-smoke}"
 
 export DATABRICKS_DELTA_CATALOG="$catalog"
 export DATABRICKS_DELTA_CONTROL_SCHEMA="$control_schema"
@@ -30,17 +33,10 @@ export DATABRICKS_DELTA_SILVER_SCHEMA="$silver_schema"
 export DATABRICKS_DELTA_CHECKPOINT_TABLE="$checkpoint_table"
 export CONVEX_SOURCE_ID="$source_id"
 export CONVEX_TABLE_NAME="$table_name"
+export DATABRICKS_DELTA_DEPLOYMENT_SLUG="${DATABRICKS_DELTA_DEPLOYMENT_SLUG:-${source_slug}-smoke}"
+export DATABRICKS_DELTA_JOB_NAME="${DATABRICKS_DELTA_JOB_NAME:-convex-sync-kit-${source_slug}-smoke-delta-extract}"
 
-"$repo_root/scripts/render-databricks-delta-bootstrap.sh" \
-  "$bootstrap_src" \
-  "$render_dir" \
-  "$catalog" \
-  "$control_schema" \
-  "$bronze_schema" \
-  "$silver_schema" \
-  "$checkpoint_table"
-
-"$repo_root/scripts/apply-databricks-sql-dir.sh" "$profile" "$warehouse_id" "$render_dir"
+"$repo_root/scripts/bootstrap-databricks-delta.sh" "$profile" "$warehouse_id"
 "$repo_root/scripts/deploy-databricks-delta.sh" "$profile" "$target"
 "$repo_root/scripts/run-databricks-delta-job.sh" "$profile" "$target"
 

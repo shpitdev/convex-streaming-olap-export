@@ -56,4 +56,7 @@ The Databricks-first assets are the starting point for direct Delta landing.
 The provider is configured from `~/.databrickscfg` by default, typically using
 the `DEFAULT` profile.
 
+Source-specific defaults are layered in from `sources/<slug>/env.sh`, starting
+with `sources/meshix-api/env.sh`.
+
 Read more: [`platform/databricks/delta/README.md`](delta/README.md)
