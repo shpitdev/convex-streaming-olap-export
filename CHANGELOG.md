@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.4](https://github.com/shpitdev/convex-sync-kit/compare/v0.0.3...v0.0.4) (2026-04-21)
+
+
+### Features
+
+* add databricks delta monitoring dashboard ([#25](https://github.com/shpitdev/convex-sync-kit/issues/25)) ([7ca81a0](https://github.com/shpitdev/convex-sync-kit/commit/7ca81a0d3aaf2731875e44f111356135af0fe479))
+* add generated databricks delta autocdc pipeline ([#27](https://github.com/shpitdev/convex-sync-kit/issues/27)) ([bd97738](https://github.com/shpitdev/convex-sync-kit/commit/bd977389eb4864a66b7cc7d8cc85dbdbad70dce8))
+
 ## [0.0.3](https://github.com/shpitdev/convex-sync-kit/compare/v0.0.2...v0.0.3) (2026-04-21)
 
 
