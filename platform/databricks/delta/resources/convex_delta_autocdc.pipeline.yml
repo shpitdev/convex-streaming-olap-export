@@ -6,7 +6,7 @@ resources:
       schema: ${var.silver_schema}
       serverless: true
       photon: true
-      continuous: false
+      continuous: true
       root_path: ${workspace.file_path}
       libraries:
         - file:

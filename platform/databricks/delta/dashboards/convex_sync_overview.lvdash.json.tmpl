@@ -4,7 +4,7 @@
       "name": "sync_summary",
       "displayName": "Sync Summary",
       "config": {
-        "source": "WITH checkpoint_latest AS ( SELECT source_id, phase, updated_at FROM `{{CATALOG}}`.`{{CONTROL_SCHEMA}}`.connector_checkpoint_latest ), checkpoint_counts AS ( SELECT source_id, COUNT(*) AS checkpoint_write_count FROM `{{CATALOG}}`.`{{CONTROL_SCHEMA}}`.`{{CHECKPOINT_TABLE}}` GROUP BY source_id ), bronze_tables AS ( SELECT COUNT(*) AS bronze_table_count FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema = '{{BRONZE_SCHEMA}}' ), silver_tables AS ( SELECT COUNT(*) AS silver_table_count FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema = '{{SILVER_SCHEMA}}' ) SELECT l.source_id, l.phase, l.updated_at, ROUND((UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) - UNIX_TIMESTAMP(l.updated_at)) / 60.0, 2) AS checkpoint_lag_minutes, COALESCE(c.checkpoint_write_count, 0) AS checkpoint_write_count, b.bronze_table_count, s.silver_table_count FROM checkpoint_latest l LEFT JOIN checkpoint_counts c ON c.source_id = l.source_id CROSS JOIN bronze_tables b CROSS JOIN silver_tables s",
+        "source": "WITH checkpoint_latest AS ( SELECT source_id, phase, updated_at FROM `{{CATALOG}}`.`{{CONTROL_SCHEMA}}`.connector_checkpoint_latest ), checkpoint_counts AS ( SELECT source_id, COUNT(*) AS checkpoint_write_count FROM `{{CATALOG}}`.`{{CONTROL_SCHEMA}}`.`{{CHECKPOINT_TABLE}}` GROUP BY source_id ), bronze_tables AS ( SELECT COUNT(DISTINCT table_name) AS bronze_table_count FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema = '{{BRONZE_SCHEMA}}' AND LEFT(table_name, 2) <> '__' AND table_name NOT LIKE 'event_log_%' AND table_type <> 'VIEW' ), silver_tables AS ( SELECT COUNT(DISTINCT table_name) AS silver_table_count FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema = '{{SILVER_SCHEMA}}' AND LEFT(table_name, 2) <> '__' AND table_name NOT LIKE 'event_log_%' AND table_type <> 'VIEW' ) SELECT l.source_id, l.phase, l.updated_at, ROUND((UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) - UNIX_TIMESTAMP(l.updated_at)) / 60.0, 2) AS checkpoint_lag_minutes, COALESCE(c.checkpoint_write_count, 0) AS checkpoint_write_count, b.bronze_table_count, s.silver_table_count FROM checkpoint_latest l LEFT JOIN checkpoint_counts c ON c.source_id = l.source_id CROSS JOIN bronze_tables b CROSS JOIN silver_tables s",
         "measures": [
           {
             "name": "Bronze Tables",
@@ -70,6 +70,11 @@
             "name": "Updated At",
             "expr": "updated_at",
             "displayName": "Updated At"
+          },
+          {
+            "name": "Lag (min)",
+            "expr": "checkpoint_lag_minutes",
+            "displayName": "Lag (min)"
           }
         ],
         "version": 1.1,
@@ -121,36 +126,82 @@
       "name": "delta_table_inventory",
       "displayName": "Delta Table Inventory",
       "config": {
-        "source": "SELECT table_schema AS layer, table_name, table_type, created, last_altered FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema IN ('{{BRONZE_SCHEMA}}', '{{SILVER_SCHEMA}}') ORDER BY table_schema, table_name",
+        "source": "WITH bronze AS ( SELECT REGEXP_REPLACE(table_name, '__cdc$', '') AS logical_table, table_name AS bronze_table, CONCAT_WS(', ', SORT_ARRAY(COLLECT_SET(table_type))) AS bronze_type, MIN(created) AS bronze_created, MAX(last_altered) AS bronze_last_altered FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema = '{{BRONZE_SCHEMA}}' AND LEFT(table_name, 2) <> '__' AND table_name NOT LIKE 'event_log_%' AND table_type <> 'VIEW' GROUP BY REGEXP_REPLACE(table_name, '__cdc$', ''), table_name ), silver AS ( SELECT table_name AS logical_table, table_name AS silver_table, CONCAT_WS(', ', SORT_ARRAY(COLLECT_SET(table_type))) AS silver_type, MIN(created) AS silver_created, MAX(last_altered) AS silver_last_altered FROM `{{CATALOG}}`.information_schema.tables WHERE table_schema = '{{SILVER_SCHEMA}}' AND LEFT(table_name, 2) <> '__' AND table_name NOT LIKE 'event_log_%' AND table_type <> 'VIEW' GROUP BY table_name ) SELECT COALESCE(b.logical_table, s.logical_table) AS logical_table, b.bronze_table, s.silver_table, b.bronze_type, s.silver_type, b.bronze_last_altered, s.silver_last_altered FROM bronze b FULL OUTER JOIN silver s ON b.logical_table = s.logical_table ORDER BY logical_table",
         "dimensions": [
           {
-            "name": "Layer",
-            "expr": "layer",
-            "displayName": "Layer"
+            "name": "Logical Table",
+            "expr": "logical_table",
+            "displayName": "Logical Table"
           },
           {
-            "name": "Table Name",
-            "expr": "table_name",
-            "displayName": "Table Name"
+            "name": "Bronze Table",
+            "expr": "bronze_table",
+            "displayName": "Bronze Table"
           },
           {
-            "name": "Table Type",
-            "expr": "table_type",
-            "displayName": "Table Type"
+            "name": "Silver Table",
+            "expr": "silver_table",
+            "displayName": "Silver Table"
           },
           {
-            "name": "Created",
-            "expr": "created",
-            "displayName": "Created"
+            "name": "Bronze Type",
+            "expr": "bronze_type",
+            "displayName": "Bronze Type"
           },
           {
-            "name": "Last Altered",
-            "expr": "last_altered",
-            "displayName": "Last Altered"
+            "name": "Silver Type",
+            "expr": "silver_type",
+            "displayName": "Silver Type"
+          },
+          {
+            "name": "Bronze Updated",
+            "expr": "bronze_last_altered",
+            "displayName": "Bronze Updated"
+          },
+          {
+            "name": "Silver Updated",
+            "expr": "silver_last_altered",
+            "displayName": "Silver Updated"
           }
         ],
         "version": 1.1,
-        "comment": "Bronze and silver table inventory."
+        "comment": "One row per logical table with bronze and silver side by side."
+      }
+    },
+    {
+      "name": "table_row_counts",
+      "displayName": "Table Row Counts",
+      "config": {
+        "source": "{{TABLE_ROW_COUNTS_SOURCE}}",
+        "dimensions": [
+          {
+            "name": "Logical Table",
+            "expr": "logical_table",
+            "displayName": "Logical Table"
+          },
+          {
+            "name": "Bronze Table",
+            "expr": "bronze_table",
+            "displayName": "Bronze Table"
+          },
+          {
+            "name": "Bronze Rows",
+            "expr": "bronze_row_count",
+            "displayName": "Bronze Rows"
+          },
+          {
+            "name": "Silver Table",
+            "expr": "silver_table",
+            "displayName": "Silver Table"
+          },
+          {
+            "name": "Silver Rows",
+            "expr": "silver_row_count",
+            "displayName": "Silver Rows"
+          }
+        ],
+        "version": 1.1,
+        "comment": "One row per logical table with bronze and silver record counts side by side."
       }
     }
   ],
@@ -338,65 +389,6 @@
         },
         {
           "widget": {
-            "name": "latest_status_table",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "sync_summary",
-                  "fields": [
-                    {
-                      "name": "Source ID",
-                      "expression": "`Source ID`"
-                    },
-                    {
-                      "name": "Phase",
-                      "expression": "`Phase`"
-                    },
-                    {
-                      "name": "Updated At",
-                      "expression": "`Updated At`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "rowsPerPage": 5,
-              "frame": {
-                "showTitle": true,
-                "title": "Latest Checkpoint"
-              },
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "Source ID",
-                    "displayName": "Source ID"
-                  },
-                  {
-                    "fieldName": "Phase",
-                    "displayName": "Phase"
-                  },
-                  {
-                    "fieldName": "Updated At",
-                    "displayName": "Updated At"
-                  }
-                ]
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 5,
-            "width": 5,
-            "height": 5
-          }
-        },
-        {
-          "widget": {
             "name": "recent_checkpoints_table",
             "queries": [
               {
@@ -428,7 +420,7 @@
             "spec": {
               "version": 2,
               "widgetType": "table",
-              "rowsPerPage": 10,
+              "rowsPerPage": 12,
               "frame": {
                 "showTitle": true,
                 "title": "Recent Checkpoints"
@@ -456,10 +448,69 @@
             }
           },
           "position": {
-            "x": 5,
+            "x": 0,
             "y": 5,
-            "width": 7,
-            "height": 5
+            "width": 12,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "table_row_counts_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "table_row_counts",
+                  "fields": [
+                    {
+                      "name": "Logical Table",
+                      "expression": "`Logical Table`"
+                    },
+                    {
+                      "name": "Bronze Rows",
+                      "expression": "`Bronze Rows`"
+                    },
+                    {
+                      "name": "Silver Rows",
+                      "expression": "`Silver Rows`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "rowsPerPage": 12,
+              "frame": {
+                "showTitle": true,
+                "title": "Record Counts By Table"
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Logical Table",
+                    "displayName": "Logical Table"
+                  },
+                  {
+                    "fieldName": "Bronze Rows",
+                    "displayName": "Bronze Rows"
+                  },
+                  {
+                    "fieldName": "Silver Rows",
+                    "displayName": "Silver Rows"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 12,
+            "height": 6
           }
         },
         {
@@ -472,20 +523,24 @@
                   "datasetName": "delta_table_inventory",
                   "fields": [
                     {
-                      "name": "Layer",
-                      "expression": "`Layer`"
+                      "name": "Logical Table",
+                      "expression": "`Logical Table`"
                     },
                     {
-                      "name": "Table Name",
-                      "expression": "`Table Name`"
+                      "name": "Bronze Table",
+                      "expression": "`Bronze Table`"
                     },
                     {
-                      "name": "Table Type",
-                      "expression": "`Table Type`"
+                      "name": "Silver Table",
+                      "expression": "`Silver Table`"
                     },
                     {
-                      "name": "Last Altered",
-                      "expression": "`Last Altered`"
+                      "name": "Bronze Updated",
+                      "expression": "`Bronze Updated`"
+                    },
+                    {
+                      "name": "Silver Updated",
+                      "expression": "`Silver Updated`"
                     }
                   ],
                   "disaggregated": true
@@ -495,28 +550,32 @@
             "spec": {
               "version": 2,
               "widgetType": "table",
-              "rowsPerPage": 25,
+              "rowsPerPage": 30,
               "frame": {
                 "showTitle": true,
-                "title": "Bronze And Silver Inventory"
+                "title": "Bronze / Silver Table Map"
               },
               "encodings": {
                 "columns": [
                   {
-                    "fieldName": "Layer",
-                    "displayName": "Layer"
+                    "fieldName": "Logical Table",
+                    "displayName": "Logical Table"
                   },
                   {
-                    "fieldName": "Table Name",
-                    "displayName": "Table Name"
+                    "fieldName": "Bronze Table",
+                    "displayName": "Bronze Table"
                   },
                   {
-                    "fieldName": "Table Type",
-                    "displayName": "Table Type"
+                    "fieldName": "Silver Table",
+                    "displayName": "Silver Table"
                   },
                   {
-                    "fieldName": "Last Altered",
-                    "displayName": "Last Altered"
+                    "fieldName": "Bronze Updated",
+                    "displayName": "Bronze Updated"
+                  },
+                  {
+                    "fieldName": "Silver Updated",
+                    "displayName": "Silver Updated"
                   }
                 ]
               }
@@ -524,9 +583,9 @@
           },
           "position": {
             "x": 0,
-            "y": 10,
+            "y": 18,
             "width": 12,
-            "height": 10
+            "height": 12
           }
         }
       ],

@@ -10,9 +10,13 @@ Files:
 Use the helper scripts:
 
 ```bash
-./scripts/render-databricks-delta-dashboard.sh /tmp/convex-sync-overview.lvdash.json
+./scripts/render-databricks-delta-dashboard.sh /tmp/convex-sync-overview.lvdash.json DEFAULT
 ./scripts/publish-databricks-delta-dashboard.sh DEFAULT <warehouse_id>
 ```
+
+Pass the Databricks profile to the render helper if you want the generated
+Lakeview dashboard to include per-table bronze and silver row counts. Without a
+profile, the dashboard still renders, but the row-count dataset is left empty.
 
 If you pass an existing dashboard ID to the publish script, it updates and
 re-publishes that dashboard. Otherwise it creates a new one and prints the

@@ -20,11 +20,15 @@ dashboard ID.
 
 The first dashboard focuses on:
 
-- latest checkpoint freshness
+- checkpoint freshness and write volume
 - bronze table count
 - silver table count
 - recent checkpoint history
-- bronze and silver table inventory
+- per-table bronze vs silver record counts
+- a side-by-side bronze/silver table map
+
+The template filters out internal Lakeflow objects from the layer counts and
+uses full-width tables so the dashboard is easier to read in Lakeview.
 
 ## AUTO CDC Status
 
@@ -38,6 +42,15 @@ just databricks-delta-run-pipeline DEFAULT prod
 
 For a newly onboarded source, silver will stay empty until you run that same
 deploy/run sequence for that source.
+
+Once deployed:
+
+- the extractor job runs every 5 minutes on a Databricks job schedule
+- the Lakeflow pipeline stays continuous after its first `run`
+
+If you want a no-touch proof loop, add a tiny heartbeat write in the upstream
+Convex app on a 1-minute cron. That gives Databricks a steady stream of real
+changes to ingest and makes the dashboard visibly move without manual reruns.
 
 What exists today:
 
