@@ -83,7 +83,7 @@ There are two supported Databricks paths:
 
 | Path | What it creates | When to use it | Recommendation |
 |---|---|---|---|
-| Databricks Delta | Unity Catalog control, bronze, and silver schemas | Primary production path | Recommended |
+| Databricks Delta | Unity Catalog control/bronze/silver schemas plus silver current-state tables | Primary production path | Recommended |
 | Databricks over S3 | Unity Catalog views over published Parquet snapshots | Reference example, simpler bridge from the Rust exporter | Supported, but secondary |
 
 Recommended Databricks Delta flow:
@@ -95,20 +95,20 @@ just databricks-delta-bootstrap <warehouse-id>
 just databricks-delta-sync-secret DEFAULT
 just databricks-delta-deploy DEFAULT prod
 just databricks-delta-run DEFAULT prod
+just databricks-delta-deploy-pipeline DEFAULT prod
+just databricks-delta-run-pipeline DEFAULT prod
 ```
 
 The Delta path creates and updates:
 
-- `convex_sync_kit_<source>_delta_control`
-- `convex_sync_kit_<source>_delta_bronze`
-- `convex_sync_kit_<source>_delta_silver`
+- `convex_sync_kit_<source>_delta_control` for checkpoints
+- `convex_sync_kit_<source>_delta_bronze` for append-only CDC landing tables
+- `convex_sync_kit_<source>_delta_silver` for Lakeflow-materialized current-state tables
 
-The silver schema is expected to stay empty until you stand up a Lakeflow `AUTO CDC` pipeline for the tables you actually want to materialize there.
-
-```bash
-just databricks-delta-deploy-pipeline DEFAULT prod
-just databricks-delta-run-pipeline DEFAULT prod
-```
+Bootstrap creates the schemas, the extractor job writes control + bronze, and the
+Lakeflow `AUTO CDC` pipeline materializes silver. The checked-in `meshix-api`
+example already includes a generated bronze-to-silver pipeline file, while new
+sources still need the same deploy/run pipeline step after bronze tables exist.
 
 Reference Databricks over S3 flow:
 
@@ -150,7 +150,7 @@ Relevant Foundry docs:
 | Local recurring analysis | raw change log parquet, staging parquet | user-defined paths |
 | S3/export | `staging/current`, manifests, versioned snapshots | bucket and prefix chosen by operator |
 | Databricks over S3 | Unity Catalog views over published parquet snapshots | `convex_sync_kit_<source>_s3` |
-| Databricks Delta | checkpoint table, bronze CDC tables, silver current-state tables | `convex_sync_kit_<source>_delta_{control,bronze,silver}` |
+| Databricks Delta | checkpoint table, bronze CDC tables, silver current-state tables materialized by Lakeflow `AUTO CDC` | `convex_sync_kit_<source>_delta_{control,bronze,silver}` |
 
 The checked-in [`sources/meshix-api/env.sh`](sources/meshix-api/env.sh) file is only an example source profile, not a repo identity. Add more source directories as you onboard more Convex projects.
 
@@ -215,8 +215,8 @@ The first version focuses on:
 - a side-by-side bronze/silver table map
 
 The dashboard now filters out internal Lakeflow objects from the bronze/silver
-counts and uses full-width tables for recent checkpoints, per-table record
-counts, and the bronze/silver map.
+counts, places recent checkpoints and per-table record counts side by side,
+and keeps the bronze/silver map full width underneath.
 
 To make the pipeline feel truly live:
 
@@ -242,7 +242,8 @@ If you want to show this repo working in a talk or video, start with:
    - `convex_sync_kit_meshix_api_delta_silver`
 4. A query result from `connector_checkpoint_latest` showing `meshix-api / delta_tail`.
 5. A `SHOW TABLES` result for the bronze schema showing many `_cdc` tables.
-6. The S3-backed `__source_map` view so people can see the reference path is real too.
+6. A `SHOW TABLES` result for the silver schema showing materialized current-state tables.
+7. The S3-backed `__source_map` view so people can see the reference path is real too.
 
 There is a more detailed capture list in [docs/demo-storyboard.md](docs/demo-storyboard.md).
 

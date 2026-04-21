@@ -27,8 +27,9 @@ The first dashboard focuses on:
 - per-table bronze vs silver record counts
 - a side-by-side bronze/silver table map
 
-The template filters out internal Lakeflow objects from the layer counts and
-uses full-width tables so the dashboard is easier to read in Lakeview.
+The template filters out internal Lakeflow objects from the layer counts,
+places recent checkpoints and per-table record counts side by side, and keeps
+the bronze/silver map full width below.
 
 ## AUTO CDC Status
 
