@@ -1,233 +1,194 @@
 # convex-sync-kit
 
-- `Language`: ![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
-- `Source`: ![Convex](https://img.shields.io/badge/Convex-EE342F?logo=convex&logoColor=white)
-- `Targets`: ![Amazon S3](https://img.shields.io/badge/Amazon%20S3-569A31?logo=amazons3&logoColor=white) ![Databricks](https://img.shields.io/badge/Databricks-FF3621?logo=databricks&logoColor=white)
-- `Infra`: ![Terraform](https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white)
+Recurring Convex export pipelines for local analytics, Databricks, and downstream systems like Palantir Foundry.
 
-Convex CDC sync engine with two supported target families:
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shpitdev/convex-sync-kit)
+[![Release](https://img.shields.io/github/v/release/shpitdev/convex-sync-kit?display_name=tag)](https://github.com/shpitdev/convex-sync-kit/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
 
-- `S3/export`: append-only raw parquet -> current-state staging parquet -> S3 publish
-- `Databricks Delta`: bronze Delta CDC landing -> Lakeflow `AUTO CDC` -> silver current-state Delta tables
+![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
+![Convex](https://img.shields.io/badge/Convex-EE342F?logo=convex&logoColor=white)
+![Amazon S3](https://img.shields.io/badge/Amazon%20S3-569A31?logo=amazons3&logoColor=white)
+![Databricks](https://img.shields.io/badge/Databricks-FF3621?logo=databricks&logoColor=white)
+![Palantir Foundry](https://img.shields.io/badge/Palantir%20Foundry-virtual%20tables-101828)
 
-The source-side behavior intentionally stays close to the public Convex/Fivetran
-extraction model:
-
-- bootstrap with `list_snapshot`
-- resume incomplete snapshots from checkpoint
-- continue with `document_deltas`
-- advance checkpoints only after durable writes succeed
-
-## Repo Map
+## Choose Your Path
 
 ```mermaid
 flowchart TD
-  Root[convex-sync-kit]
-  Inspect[apps/convex-inspect]
-  CLI[apps/convex-sync]
-  Core[crates/convex-sync-core]
-  S3[crates/convex-export-s3]
-  AWS[platform/aws]
-  DBS3[platform/databricks/s3]
-  DBN[platform/databricks/delta]
-  Root --> Inspect
-  Root --> CLI
-  Root --> Core
-  Root --> S3
-  Root --> AWS
-  Root --> DBS3
-  Root --> DBN
+  A[What are you trying to do?]
+  A --> B[One-off manual export]
+  A --> C[Recurring local analysis]
+  A --> D[Databricks]
+  A --> E[Palantir Foundry]
+
+  B --> B1[Use the official Convex export docs]
+  C --> C1[Run convex-sync locally and query parquet with DuckDB or Polars]
+  D --> D1[Recommended: Databricks Delta]
+  D --> D2[Reference path: S3 backed views]
+  E --> E1[Recommended: Databricks Delta -> Unity Catalog -> Foundry virtual tables]
+  E --> E2[Fallback: S3 snapshots -> Foundry S3 virtual tables]
 ```
 
-Read the repo by layer:
+### 1. One-off manual export
 
-- [`apps/convex-inspect/README.md`](apps/convex-inspect/README.md): direct source inspection commands
-- [`apps/convex-sync/README.md`](apps/convex-sync/README.md): CLI surface and S3/export runtime commands
-- `crates/convex-sync-core/`: shared Convex client, checkpoint FSM, event normalization, sync engine
-- `crates/convex-export-s3/`: raw parquet sink, staging materialization, S3 publish flow
-- [`platform/aws/README.md`](platform/aws/README.md): AWS assets for publishing and downstream readers
-- [`platform/databricks/README.md`](platform/databricks/README.md): Databricks target family overview
-- [`platform/databricks/s3/README.md`](platform/databricks/s3/README.md): Databricks consuming the S3 export path
-- [`platform/databricks/delta/README.md`](platform/databricks/delta/README.md): Databricks Delta bronze/silver landing
-- [`sources/README.md`](sources/README.md): source-specific defaults layered on top of the shared engine
+If you only need a one-time export or ad hoc backfill, use the official Convex tooling directly. This repo is aimed at recurring pipelines, not the simplest possible one-shot export.
 
-## Install
+- [Convex streaming import/export](https://docs.convex.dev/production/integrations/streaming-import-export)
+- [Convex streaming export API](https://docs.convex.dev/streaming-export-api)
 
-Release install:
+### 2. Recurring local analysis
+
+If you want recurring exports but do not want a warehouse yet, run the S3/export engine locally and point the outputs wherever you want. `.memory/` is only this repo's default. Every path-bearing command can be overridden.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/shpitdev/convex-sync-kit/main/install.sh | bash
+mkdir -p /tmp/convex-sync-kit-demo
+
+convex-sync sync-once \
+  --output /tmp/convex-sync-kit-demo/raw_change_log \
+  --checkpoint-path /tmp/convex-sync-kit-demo/raw_change_log.checkpoint.json
+
+convex-sync materialize-staging \
+  --raw-change-log /tmp/convex-sync-kit-demo/raw_change_log \
+  --output /tmp/convex-sync-kit-demo/staging \
+  --incremental
+
+duckdb -c "select * from read_parquet('/tmp/convex-sync-kit-demo/staging/**/*.parquet') limit 20"
 ```
 
-Local checkout dev install:
+### 3. Using Databricks
+
+There are two supported Databricks paths:
+
+| Path | What it creates | When to use it | Recommendation |
+|---|---|---|---|
+| Databricks Delta | Unity Catalog control, bronze, and silver schemas | Primary production path | Recommended |
+| Databricks over S3 | Unity Catalog views over published Parquet snapshots | Reference example, simpler bridge from the Rust exporter | Supported, but secondary |
+
+Recommended Databricks Delta flow:
 
 ```bash
-./install.sh --mode dev --force
-convex-sync-dev --help
+export CONVEX_SYNC_SOURCE=meshix-api
+
+just databricks-delta-bootstrap 63d28889f3eb3c4b
+just databricks-delta-sync-secret DEFAULT
+just databricks-delta-deploy DEFAULT prod
+just databricks-delta-run DEFAULT prod
 ```
 
-Current release coverage:
+Reference Databricks over S3 flow:
 
-- stable and prerelease archives target `linux-amd64`
-- `convex-sync-dev` is checkout-linked and rebuilds incrementally via Cargo
-- release installs go to `~/.local/share/convex-sync/<version>/convex-sync`
-- command symlinks go in `~/.local/bin`
-- `convex-inspect` is repo-local today and not part of the release artifact
+```bash
+export CONVEX_SYNC_SOURCE=meshix-api
 
-## Source Configs
-
-The repo name stays generic. Source-specific defaults live under `sources/`.
-
-- current source profile: `sources/meshix-api/env.sh`
-- activate a source by setting `CONVEX_SYNC_SOURCE=<slug>`
-- explicit env vars still win over source defaults
-
-This is the intended scaling model for running the same engine against many
-Convex projects without forking the repo or renaming the binaries.
-
-## Operator Binaries
-
-- `convex-inspect`: inspect Convex schemas, snapshot pages, and delta pages directly
-- `convex-sync`: run the maintained parquet -> staging -> S3 export workflow
-
-## Supported Variations
-
-```mermaid
-flowchart LR
-  C[Convex]
-  E[shared sync semantics]
-  S3[S3 export path]
-  DBN[Databricks Delta path]
-  DBS3[Databricks over S3 path]
-  C --> E
-  E --> S3
-  E -. mirrored extractor semantics .-> DBN
-  S3 --> DBS3
+just run --bucket your-bucket --prefix prod
+just databricks-sync-staging-views --warehouse-id 63d28889f3eb3c4b --bucket your-bucket --prefix prod
 ```
 
-### `S3/export`
+### 4. Using Palantir Foundry
 
-The maintained Rust runtime path:
+If you are already on Databricks, the recommended Foundry path is:
 
-1. `sync-once` writes append-only parquet batches under `.memory/raw_change_log/`
-2. `materialize-staging --incremental` builds `.memory/staging/`
-3. `publish-s3` uploads `staging/current/...` plus versioned manifests
-4. `run` loops those steps on a poll interval
+```text
+Convex -> convex-sync-kit Databricks Delta -> Unity Catalog -> Foundry Databricks source -> virtual tables
+```
 
-CLI:
+That path is the best fit because Foundry's Databricks connector supports virtual tables over Unity Catalog, including richer Delta and Iceberg behavior when external access is enabled.
 
-- `cargo run -p convex-sync -- sync-once`
-- `cargo run -p convex-sync -- materialize-staging`
-- `cargo run -p convex-sync -- publish-s3 --bucket your-bucket`
-- `cargo run -p convex-sync -- run --bucket your-bucket`
+Fallback path:
 
-Inspection:
+```text
+Convex -> convex-sync-kit S3 snapshots -> Foundry S3 source -> Parquet virtual tables or dataset sync
+```
 
-- `cargo run -p convex-inspect -- schemas`
-- `cargo run -p convex-inspect -- snapshot --table-name users`
-- `cargo run -p convex-inspect -- deltas --cursor 0`
+That works, but it is a simpler and more limited path. Palantir's S3 connector supports Parquet virtual tables, but they rely on schema inference, while the Databricks connector gives you a cleaner Unity Catalog table surface.
 
-Or via `just`:
+Relevant Foundry docs:
 
-- `just dev-cli --help`
-- `just schemas`
-- `just snapshot --table-name users`
-- `just deltas --cursor 0`
-- `just sync-once`
-- `just materialize-staging`
-- `just publish-s3 --bucket your-bucket`
-- `just run --bucket your-bucket`
+- [Databricks connector](https://www.palantir.com/docs/foundry/available-connectors/databricks/)
+- [Amazon S3 connector](https://www.palantir.com/docs/foundry/available-connectors/amazon-s3/)
+- [Virtual tables](https://www.palantir.com/docs/foundry/data-integration/virtual-tables/index.html)
 
-### `Databricks Delta`
+## What This Repo Produces
 
-Checked-in Databricks Delta assets:
+| Path | Core artifacts | Current recommended naming |
+|---|---|---|
+| Local recurring analysis | raw change log parquet, staging parquet | user-defined paths |
+| S3/export | `staging/current`, manifests, versioned snapshots | bucket and prefix chosen by operator |
+| Databricks over S3 | Unity Catalog views over published parquet snapshots | `convex_sync_kit_<source>_s3` |
+| Databricks Delta | checkpoint table, bronze CDC tables, silver current-state tables | `convex_sync_kit_<source>_delta_{control,bronze,silver}` |
 
-- `platform/databricks/delta/databricks.yml`
-- `platform/databricks/delta/resources/convex_delta_extract.job.yml`
-- `platform/databricks/delta/extractor/convex_cdc_job.py`
-- `platform/databricks/delta/sql/bootstrap/`
-- `platform/databricks/delta/lakeflow/bronze_to_silver_template.sql`
+The current checked-in source profile is [`sources/meshix-api/env.sh`](sources/meshix-api/env.sh). That is only one source profile, not a repo identity. Add more source directories as you onboard more Convex projects.
 
-Runtime split:
+## Output Paths And Defaults
 
-1. a Databricks job runs the extractor and appends bronze CDC rows
-2. checkpoint rows land in the control schema
-3. Lakeflow `AUTO CDC` materializes silver current-state tables
+Examples in this repo often use `.memory/` because that is convenient for local development here. It is not a required location.
 
-Packaged entrypoints:
+| Command | Default | How to override |
+|---|---|---|
+| `convex-sync sync-once` | `.memory/raw_change_log` | `--output`, `--checkpoint-path` |
+| `convex-sync materialize-staging` | `.memory/staging` | `--raw-change-log`, `--output`, `--state-path` |
+| `convex-sync publish-s3` | `.memory/staging` | `--staging-dir`, `--bucket`, `--prefix` |
+| `convex-sync run` | `.memory/raw_change_log`, `.memory/staging` | `--output`, `--checkpoint-path`, `--staging-dir`, `--staging-state-path`, `--bucket`, `--prefix` |
+| `convex-inspect` commands | stdout unless set | `--output`, `--output-format` |
 
-- `just databricks-delta-sync-secret`
-- `just databricks-delta-bootstrap <warehouse_id>`
-- `just databricks-delta-deploy`
-- `just databricks-delta-run`
-- `just databricks-delta-smoke <warehouse_id>`
+## Docs By Audience
 
-Recommended production naming:
+| Audience | Start here | Why |
+|---|---|---|
+| End users / operators | [`platform/databricks/delta/README.md`](platform/databricks/delta/README.md), [`platform/databricks/s3/README.md`](platform/databricks/s3/README.md), [`sources/README.md`](sources/README.md) | Platform-specific deployment and source defaults |
+| CLI users | [`apps/convex-sync/README.md`](apps/convex-sync/README.md), [`apps/convex-inspect/README.md`](apps/convex-inspect/README.md) | Command reference and CLI help |
+| Contributors | [`platform/databricks/README.md`](platform/databricks/README.md), [`platform/aws/README.md`](platform/aws/README.md), [docs/architecture.md](docs/architecture.md) | Code ownership and platform layout |
 
-- S3-backed Databricks schema: `convex_sync_kit_<source>_s3`
-- Delta control schema: `convex_sync_kit_<source>_delta_control`
-- Delta bronze schema: `convex_sync_kit_<source>_delta_bronze`
-- Delta silver schema: `convex_sync_kit_<source>_delta_silver`
+## Testing And CI
 
-### `Databricks over S3`
+| Layer | Present | Tooling | Runs in CI |
+|---|---|---|---|
+| unit | yes | `cargo test --workspace` | yes |
+| integration | no | `none` | no |
+| e2e api | no | `none` | no |
+| e2e web | no | `none` | no |
 
-This variation keeps the existing Rust exporter and S3 publish loop, then adds:
+Remote automation:
 
-1. Unity Catalog external location coverage over `staging/current`
-2. stable SQL views from `platform/databricks/s3/sql/register_staging_views.sql.tmpl`
-3. Databricks consumers reading the published parquet snapshots directly
+```bash
+depot ci run --workflow .depot/workflows/ci.yml
+```
 
-## Platform Assets
+Release automation:
 
-Snapshot templates into `.memory/` before running Terraform:
+```bash
+depot ci run --workflow .depot/workflows/release.yml
+depot ci run --workflow .depot/workflows/release-rc.yml
+```
 
-- `just aws-template-snapshot`
-- `just databricks-template-snapshot`
+## Suggested Screenshots
 
-The S3-backed Databricks landing sync remains supported:
+If you want to show this repo working in a talk or video, start with:
 
-- `just databricks-sync-staging-views --warehouse-id <warehouse-id> --bucket <bucket> --prefix <prefix>`
+1. The decision tree above, so viewers understand when this repo is the right tool.
+2. Databricks Jobs showing `convex-sync-kit-meshix-api-prod-delta-extract` succeeding.
+3. Unity Catalog showing both:
+   - `convex_sync_kit_meshix_api_s3`
+   - `convex_sync_kit_meshix_api_delta_control`
+   - `convex_sync_kit_meshix_api_delta_bronze`
+   - `convex_sync_kit_meshix_api_delta_silver`
+4. A query result from `connector_checkpoint_latest` showing `meshix-api / delta_tail`.
+5. A `SHOW TABLES` result for the bronze schema showing many `_cdc` tables.
+6. The S3-backed `__source_map` view so people can see the reference path is real too.
 
-That script renders SQL from
-`platform/databricks/s3/sql/register_staging_views.sql.tmpl` and applies stable
-views over the published S3 parquet files.
-
-## Verification
-
-Local:
-
-- `just install-hooks` configures a repo-local pre-commit hook
-- the hook runs `just verify`
-
-Remote:
-
-- `.depot/workflows/ci.yml` runs:
-  - `02-rustfmt`
-  - `01-changed-paths`
-  - `03-clippy-inspect`
-  - `04-test-inspect`
-  - `05-clippy-sync`
-  - `06-test-sync`
-- `.depot/workflows/release.yml` creates stable release PRs and publishes CLI archives
-- `.depot/workflows/release-rc.yml` publishes numbered prerelease archives from `main`
-- `.github/workflows/semantic-pr.yml` enforces conventional PR titles so stable releases can be created automatically from merged PRs
-- `.github/workflows/semgrep.yml` runs the lightweight security scan
-
-## Release Source Of Truth
-
-Stable releases are driven by merged PR titles on `main`.
-
-- use conventional PR titles such as `feat: ...`, `fix: ...`, or `deps: ...`
-- `release-please` now starts release history from commit `0cf9f47`
-- merge to `main` opens or advances the stable release PR automatically when a releasable PR lands anywhere the repo-wide release config considers in scope
-- both release workflows also support manual `workflow_dispatch`, so there is always a button path in GitHub Actions
+There is a more detailed capture list in [docs/demo-storyboard.md](docs/demo-storyboard.md).
 
 ## References
 
+- [Ask DeepWiki about this repo](https://deepwiki.com/shpitdev/convex-sync-kit)
 - [docs/architecture.md](docs/architecture.md)
 - [docs/public-reference-map.md](docs/public-reference-map.md)
 - [docs/release-artifacts.md](docs/release-artifacts.md)
-- [Convex streaming export docs](https://docs.convex.dev/production/integrations/streaming-import-export)
-- [Convex streaming export API](https://docs.convex.dev/streaming-export-api)
+- [docs/demo-storyboard.md](docs/demo-storyboard.md)
 - [Upstream Convex `fivetran_source` crate](https://github.com/get-convex/convex-backend/tree/main/crates/fivetran_source)
 - [Databricks `AUTO CDC` docs](https://docs.databricks.com/aws/en/ldp/cdc)
+
+## License
+
+[MIT](LICENSE)
