@@ -41,7 +41,7 @@ source_id="${CONVEX_SOURCE_ID:-$deployment_url}"
 source_slug="${CONVEX_SYNC_SOURCE_SLUG:-default}"
 source_slug_sql="${CONVEX_SYNC_SOURCE_SQL:-${source_slug//-/_}}"
 deployment_slug="${DATABRICKS_DELTA_DEPLOYMENT_SLUG:-${source_slug}-${target}}"
-pipeline_name="${DATABRICKS_DELTA_AUTODC_PIPELINE_NAME:-${DATABRICKS_DELTA_AUTOCDC_PIPELINE_NAME:-convex-sync-kit-${deployment_slug}-autocdc}}"
+pipeline_name="${DATABRICKS_DELTA_AUTOCDC_PIPELINE_NAME:-convex-sync-kit-${deployment_slug}-autocdc}"
 pipeline_file="${DATABRICKS_DELTA_AUTOCDC_PIPELINE_FILE:-${deployment_slug}-bronze-to-silver.sql}"
 generated_file="$bundle_root/generated/$pipeline_file"
 
