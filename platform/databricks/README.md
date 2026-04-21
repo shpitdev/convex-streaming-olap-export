@@ -3,16 +3,16 @@
 Databricks assets grouped by target family:
 
 - `s3/`: Databricks consuming the existing S3 export path
-- `native/`: Databricks-first assets where Convex changes land directly in
+- `delta/`: Databricks-first assets where Convex changes land directly in
   Unity Catalog Delta tables
 
 ```mermaid
 flowchart LR
   S3[S3-backed path]
-  Native[Databricks-native path]
+  Delta[Databricks Delta path]
   S3 --> Views[Unity Catalog views over S3 parquet]
-  Native --> Bronze[bronze CDC Delta]
-  Native --> Silver[silver current-state Delta]
+  Delta --> Bronze[bronze CDC Delta]
+  Delta --> Silver[silver current-state Delta]
 ```
 
 Use these assets the same way as the AWS templates:
@@ -42,17 +42,18 @@ external location before `read_files(...)` views are applied.
 
 Read more: [`platform/databricks/s3/README.md`](s3/README.md)
 
-## `native/`
+## `delta/`
 
 The Databricks-first assets are the starting point for direct Delta landing.
 
-- `native/extractor/`: a Databricks job entrypoint that mirrors the current
+- `delta/extractor/`: a Databricks job entrypoint that mirrors the current
   Convex snapshot/delta checkpoint logic and writes bronze CDC tables
-- `native/lakeflow/`: Lakeflow SQL templates that turn bronze CDC tables into
+- `delta/lakeflow/`: Lakeflow SQL templates that turn bronze CDC tables into
   silver current-state tables
-- `native/sql/`: bootstrap DDL for schemas and control tables
+- `delta/sql/`: bootstrap DDL for schemas and control tables
+- `delta/resources/`: Databricks bundle job definitions
 
 The provider is configured from `~/.databrickscfg` by default, typically using
 the `DEFAULT` profile.
 
-Read more: [`platform/databricks/native/README.md`](native/README.md)
+Read more: [`platform/databricks/delta/README.md`](delta/README.md)

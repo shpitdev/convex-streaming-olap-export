@@ -39,9 +39,11 @@ as separate binary assets:
 
 - `platform/aws/`
 - `platform/databricks/s3/`
-- `platform/databricks/native/extractor/convex_cdc_job.py`
-- `platform/databricks/native/sql/bootstrap/`
-- `platform/databricks/native/lakeflow/`
+- `platform/databricks/delta/databricks.yml`
+- `platform/databricks/delta/resources/`
+- `platform/databricks/delta/extractor/convex_cdc_job.py`
+- `platform/databricks/delta/sql/bootstrap/`
+- `platform/databricks/delta/lakeflow/`
 
 ## Explicit Non-Artifacts
 
@@ -59,4 +61,4 @@ Not in the first release slice:
 
 - wider platform matrix beyond `linux-amd64`
 - container images for the S3/export runtime
-- separate packaging for Databricks-native assets
+- separate packaging for Databricks Delta assets

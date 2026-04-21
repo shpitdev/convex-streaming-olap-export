@@ -1,4 +1,4 @@
-# Databricks-native Target
+# Databricks Delta Target
 
 Databricks as the primary landing plane:
 
@@ -27,13 +27,47 @@ cannot overwrite key, ordering, or delete semantics.
 
 ## Layout
 
+- `databricks.yml`: Databricks bundle entrypoint
+- `resources/`: Databricks bundle resources for the extractor job
 - `extractor/convex_cdc_job.py`: Databricks job entrypoint
 - `sql/bootstrap/`: ordered bootstrap DDL for configurable control/bronze/silver schemas and checkpoint table
 - `lakeflow/bronze_to_silver_template.sql`: per-table Lakeflow template
 
-Apply the bootstrap directory with:
+## Deploy Surface
+
+Bundle lifecycle:
+
+- `scripts/deploy-databricks-delta.sh <profile> <target>`
+- `scripts/run-databricks-delta-job.sh <profile> <target> [job_key]`
+- `scripts/run-databricks-delta-smoke.sh <profile> <target> <warehouse_id>`
+
+These scripts default `DATABRICKS_BUNDLE_ENGINE=direct` so deployment does not
+depend on Terraform downloads.
+
+Bootstrap SQL can still be applied directly with:
 
 - `scripts/apply-databricks-sql-dir.sh <profile> <warehouse_id> <rendered_sql_dir>`
 
 The extractor mirrors the Rust source/checkpoint logic and does not depend on
 the local parquet/S3 path.
+
+## Typical Flow
+
+```mermaid
+flowchart LR
+  B[bundle validate/deploy]
+  J[convex_delta_extract job]
+  C[checkpoint table]
+  T[bronze CDC tables]
+  B --> J
+  J --> C
+  J --> T
+```
+
+Recommended operator entrypoints:
+
+```bash
+just databricks-delta-deploy
+just databricks-delta-run
+just databricks-delta-smoke <warehouse_id>
+```

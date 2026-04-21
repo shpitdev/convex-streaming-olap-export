@@ -6,7 +6,7 @@ This repo has three explicit layers:
 
 - `core`: Convex extraction and checkpoint semantics
 - `target-s3`: raw parquet, staging parquet, and S3 publish
-- `platform/databricks`: Databricks assets for both S3-backed consumption and Databricks-native landing
+- `platform/databricks`: Databricks assets for both S3-backed consumption and Databricks Delta landing
 
 The shared extraction logic stays target-agnostic. Targets decide how event
 batches are durably written and what downstream shape they expose.
@@ -67,7 +67,7 @@ Use it when you want:
 - a target-agnostic export contract
 - another platform to consume S3 directly
 
-## `Databricks/native`
+## `Databricks/delta`
 
 ```text
 Convex
@@ -87,7 +87,7 @@ Owned pieces:
 Use it when:
 
 - Databricks is the primary serving layer
-- you want Databricks-native CDC reconstruction
+- you want Databricks Delta CDC reconstruction
 - downstream consumers can read Unity Catalog tables directly
 
 ## Data Shapes
@@ -121,7 +121,7 @@ Append-only CDC landing in Delta.
 Current-state Delta tables derived from bronze CDC.
 
 - one current row per source key
-- resolved with Databricks-native CDC semantics
+- resolved with Databricks Delta CDC semantics
 
 ## Checkpoints
 
@@ -140,7 +140,7 @@ Rules:
 Target storage differs:
 
 - `S3/export`: file-backed JSON
-- `Databricks/native`: Delta control table
+- `Databricks/delta`: Delta control table
 
 ## Boundary
 
@@ -149,7 +149,7 @@ This repo should own:
 - Convex extraction
 - checkpoint semantics
 - S3/export target code
-- Databricks-native landing assets
+- Databricks Delta landing assets
 
 Downstream systems should own:
 

@@ -1,6 +1,6 @@
 # Convex CDC Job
 
-`convex_cdc_job.py` is the Databricks job entrypoint for the Databricks-native
+`convex_cdc_job.py` is the Databricks job entrypoint for the Databricks Delta
 target family.
 
 It mirrors the current Rust source/checkpoint behavior:
@@ -24,3 +24,6 @@ It mirrors the current Rust source/checkpoint behavior:
 - `DATABRICKS_CONTROL_SCHEMA`: defaults to `control`
 - `DATABRICKS_BRONZE_SCHEMA`: defaults to `bronze`
 - `DATABRICKS_CHECKPOINT_TABLE`: defaults to `connector_checkpoint`
+
+In the bundled Databricks Delta path, these are usually passed as task
+parameters rather than exported manually.

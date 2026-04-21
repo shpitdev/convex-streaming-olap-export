@@ -75,6 +75,15 @@ databricks-sync-staging-views *args:
 databricks-apply-sql-dir profile warehouse_id sql_dir:
   ./scripts/apply-databricks-sql-dir.sh {{profile}} {{warehouse_id}} {{sql_dir}}
 
+databricks-delta-deploy profile="DEFAULT" target="dev":
+  ./scripts/deploy-databricks-delta.sh {{profile}} {{target}}
+
+databricks-delta-run profile="DEFAULT" target="dev" job_key="convex_delta_extract":
+  ./scripts/run-databricks-delta-job.sh {{profile}} {{target}} {{job_key}}
+
+databricks-delta-smoke warehouse_id profile="DEFAULT" target="dev":
+  ./scripts/run-databricks-delta-smoke.sh {{profile}} {{target}} {{warehouse_id}}
+
 # Install
 install-dev:
   ./install.sh --mode dev --force
