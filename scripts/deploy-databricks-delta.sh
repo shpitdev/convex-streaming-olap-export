@@ -55,6 +55,6 @@ bundle_args=(
 
 (
   cd "$bundle_root"
-  databricks bundle validate -p "$profile" -t "$target" "${bundle_args[@]}"
+  DATABRICKS_BUNDLE_ENGINE="$bundle_engine" databricks bundle validate -p "$profile" -t "$target" "${bundle_args[@]}"
   DATABRICKS_BUNDLE_ENGINE="$bundle_engine" databricks bundle deploy -p "$profile" -t "$target" "${bundle_args[@]}"
 )
