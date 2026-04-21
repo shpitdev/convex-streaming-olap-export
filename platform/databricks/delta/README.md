@@ -29,6 +29,7 @@ cannot overwrite key, ordering, or delete semantics.
 
 - `databricks.yml`: Databricks bundle entrypoint
 - `resources/`: Databricks bundle resources for the extractor job
+- `dashboards/`: Lakeview dashboard templates and metadata
 - `extractor/convex_cdc_job.py`: Databricks job entrypoint
 - `sql/bootstrap/`: ordered bootstrap DDL for configurable control/bronze/silver schemas and checkpoint table
 - `lakeflow/bronze_to_silver_template.sql`: per-table Lakeflow template
@@ -39,6 +40,8 @@ Bundle lifecycle:
 
 - `scripts/ensure-databricks-delta-secret.sh <profile> [scope] [key]`
 - `scripts/bootstrap-databricks-delta.sh <profile> <warehouse_id>`
+- `scripts/render-databricks-delta-dashboard.sh <output_file>`
+- `scripts/publish-databricks-delta-dashboard.sh <profile> <warehouse_id> [dashboard_id]`
 - `scripts/deploy-databricks-delta.sh <profile> <target>`
 - `scripts/run-databricks-delta-job.sh <profile> <target> [job_key]`
 - `scripts/run-databricks-delta-smoke.sh <profile> <target> <warehouse_id>`
@@ -105,6 +108,7 @@ Recommended operator entrypoints:
 ```bash
 just databricks-delta-sync-secret
 just databricks-delta-bootstrap <warehouse_id>
+just databricks-delta-publish-dashboard DEFAULT <warehouse_id>
 just databricks-delta-deploy
 just databricks-delta-run
 just databricks-delta-smoke <warehouse_id>
