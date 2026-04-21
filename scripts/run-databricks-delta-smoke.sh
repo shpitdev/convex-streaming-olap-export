@@ -11,9 +11,54 @@ target="$2"
 warehouse_id="$3"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+preserve_or_unset() {
+  local var_name="$1"
+  local was_set="$2"
+  local prior_value="$3"
+  if [[ "$was_set" == "1" ]]; then
+    printf -v "$var_name" '%s' "$prior_value"
+    export "$var_name"
+  else
+    unset "$var_name" || true
+  fi
+}
+
+had_control_schema=0
+prior_control_schema=""
+if [[ -n "${DATABRICKS_DELTA_CONTROL_SCHEMA+x}" ]]; then
+  had_control_schema=1
+  prior_control_schema="${DATABRICKS_DELTA_CONTROL_SCHEMA}"
+fi
+
+had_bronze_schema=0
+prior_bronze_schema=""
+if [[ -n "${DATABRICKS_DELTA_BRONZE_SCHEMA+x}" ]]; then
+  had_bronze_schema=1
+  prior_bronze_schema="${DATABRICKS_DELTA_BRONZE_SCHEMA}"
+fi
+
+had_silver_schema=0
+prior_silver_schema=""
+if [[ -n "${DATABRICKS_DELTA_SILVER_SCHEMA+x}" ]]; then
+  had_silver_schema=1
+  prior_silver_schema="${DATABRICKS_DELTA_SILVER_SCHEMA}"
+fi
+
+had_source_id=0
+prior_source_id=""
+if [[ -n "${CONVEX_SOURCE_ID+x}" ]]; then
+  had_source_id=1
+  prior_source_id="${CONVEX_SOURCE_ID}"
+fi
+
 # shellcheck source=/dev/null
 source "$repo_root/scripts/load-source-config.sh"
 load_convex_sync_source_config "$repo_root"
+preserve_or_unset DATABRICKS_DELTA_CONTROL_SCHEMA "$had_control_schema" "$prior_control_schema"
+preserve_or_unset DATABRICKS_DELTA_BRONZE_SCHEMA "$had_bronze_schema" "$prior_bronze_schema"
+preserve_or_unset DATABRICKS_DELTA_SILVER_SCHEMA "$had_silver_schema" "$prior_silver_schema"
+preserve_or_unset CONVEX_SOURCE_ID "$had_source_id" "$prior_source_id"
 timestamp="$(date +%Y%m%d%H%M%S)"
 
 catalog="${DATABRICKS_DELTA_CATALOG:-workspace}"
