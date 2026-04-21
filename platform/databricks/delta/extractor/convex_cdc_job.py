@@ -20,6 +20,11 @@ from pyspark.sql.types import (
     StructType,
 )
 
+try:
+    from pyspark.dbutils import DBUtils
+except ImportError:  # local syntax checks and non-Databricks execution
+    DBUtils = None  # type: ignore[assignment]
+
 
 spark = SparkSession.builder.getOrCreate()
 
@@ -47,6 +52,33 @@ def opt(value: Optional[str], env_name: str, default: Optional[str] = None) -> s
     if value is not None:
         return value
     return env(env_name, default)
+
+
+def resolve_deploy_key(
+    *,
+    direct_value: Optional[str],
+    secret_scope: Optional[str],
+    secret_key: Optional[str],
+) -> str:
+    if direct_value is not None:
+        return direct_value
+
+    env_value = os.getenv("CONVEX_DEPLOY_KEY")
+    if env_value:
+        return env_value
+
+    scope = secret_scope or os.getenv("CONVEX_DEPLOY_KEY_SECRET_SCOPE")
+    key = secret_key or os.getenv("CONVEX_DEPLOY_KEY_SECRET_KEY")
+    if not scope or not key:
+        raise RuntimeError(
+            "missing Convex deploy key: provide --deploy-key, CONVEX_DEPLOY_KEY, "
+            "or both deploy-key secret scope/key settings"
+        )
+
+    if DBUtils is None:
+        raise RuntimeError("pyspark.dbutils.DBUtils is unavailable outside Databricks runtime")
+
+    return DBUtils(spark).secrets.get(scope=scope, key=key)
 
 
 @dataclass
@@ -374,6 +406,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Convex CDC Databricks extractor")
     parser.add_argument("--deployment-url")
     parser.add_argument("--deploy-key")
+    parser.add_argument("--deploy-key-secret-scope")
+    parser.add_argument("--deploy-key-secret-key")
     parser.add_argument("--source-id")
     parser.add_argument("--table-name")
     parser.add_argument("--catalog")
@@ -441,7 +475,11 @@ def run_once() -> None:
     args = parse_args()
 
     deployment_url = opt(args.deployment_url, "CONVEX_DEPLOYMENT_URL")
-    deploy_key = opt(args.deploy_key, "CONVEX_DEPLOY_KEY")
+    deploy_key = resolve_deploy_key(
+        direct_value=args.deploy_key,
+        secret_scope=args.deploy_key_secret_scope,
+        secret_key=args.deploy_key_secret_key,
+    )
     source_id = opt(args.source_id, "CONVEX_SOURCE_ID", deployment_url)
     table_name = args.table_name if args.table_name is not None else os.getenv("CONVEX_TABLE_NAME")
 

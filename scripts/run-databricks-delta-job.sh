@@ -29,23 +29,27 @@ read_env_file_value() {
 }
 
 deployment_url="${CONVEX_DEPLOYMENT_URL:-$(read_env_file_value CONVEX_DEPLOYMENT_URL || true)}"
-deploy_key="${CONVEX_DEPLOY_KEY:-$(read_env_file_value CONVEX_DEPLOY_KEY || true)}"
 
-if [[ -z "$deployment_url" || -z "$deploy_key" ]]; then
-  echo "CONVEX_DEPLOYMENT_URL and CONVEX_DEPLOY_KEY are required" >&2
+if [[ -z "$deployment_url" ]]; then
+  echo "CONVEX_DEPLOYMENT_URL is required" >&2
   exit 1
 fi
 
 source_id="${CONVEX_SOURCE_ID:-$deployment_url}"
 table_name="${CONVEX_TABLE_NAME:-}"
+secret_scope="${DATABRICKS_DELTA_SECRET_SCOPE:-convex-streaming-olap-export}"
+secret_key="${DATABRICKS_DELTA_SECRET_KEY:-convex-deploy-key}"
 catalog="${DATABRICKS_DELTA_CATALOG:-workspace}"
 control_schema="${DATABRICKS_DELTA_CONTROL_SCHEMA:-convex_streaming_olap_export_control}"
 bronze_schema="${DATABRICKS_DELTA_BRONZE_SCHEMA:-convex_streaming_olap_export_bronze}"
 checkpoint_table="${DATABRICKS_DELTA_CHECKPOINT_TABLE:-connector_checkpoint}"
 
+"$repo_root/scripts/ensure-databricks-delta-secret.sh" "$profile" "$secret_scope" "$secret_key"
+
 bundle_args=(
   --var "convex_deployment_url=$deployment_url"
-  --var "convex_deploy_key=$deploy_key"
+  --var "convex_deploy_key_secret_scope=$secret_scope"
+  --var "convex_deploy_key_secret_key=$secret_key"
   --var "source_id=$source_id"
   --var "table_name=$table_name"
   --var "catalog=$catalog"

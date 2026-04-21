@@ -75,6 +75,9 @@ databricks-sync-staging-views *args:
 databricks-apply-sql-dir profile warehouse_id sql_dir:
   ./scripts/apply-databricks-sql-dir.sh {{profile}} {{warehouse_id}} {{sql_dir}}
 
+databricks-delta-sync-secret *args:
+  ./scripts/ensure-databricks-delta-secret.sh {{args}}
+
 databricks-delta-deploy profile="DEFAULT" target="dev":
   ./scripts/deploy-databricks-delta.sh {{profile}} {{target}}
 

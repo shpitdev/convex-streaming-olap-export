@@ -37,12 +37,33 @@ cannot overwrite key, ordering, or delete semantics.
 
 Bundle lifecycle:
 
+- `scripts/ensure-databricks-delta-secret.sh <profile> [scope] [key]`
 - `scripts/deploy-databricks-delta.sh <profile> <target>`
 - `scripts/run-databricks-delta-job.sh <profile> <target> [job_key]`
 - `scripts/run-databricks-delta-smoke.sh <profile> <target> <warehouse_id>`
 
 These scripts default `DATABRICKS_BUNDLE_ENGINE=direct` so deployment does not
 depend on Terraform downloads.
+
+## Secret Contract
+
+The Databricks bundle never receives the raw Convex deploy key as a bundle
+variable.
+
+- The deploy key lives in a Databricks secret scope.
+- The bundle only carries the secret scope name and secret key name.
+- The extractor resolves the deploy key inside Databricks at runtime with
+  `dbutils.secrets.get(...)`.
+
+Helper defaults:
+
+- `DATABRICKS_DELTA_SECRET_SCOPE=convex-streaming-olap-export`
+- `DATABRICKS_DELTA_SECRET_KEY=convex-deploy-key`
+
+If `CONVEX_DEPLOY_KEY` is available locally, the deploy and run helpers will
+create or update that Databricks secret automatically before validating,
+deploying, or running the job. If the local key is not available, the helpers
+require the target Databricks secret to already exist.
 
 Bootstrap SQL can still be applied directly with:
 
@@ -67,6 +88,7 @@ flowchart LR
 Recommended operator entrypoints:
 
 ```bash
+just databricks-delta-sync-secret
 just databricks-delta-deploy
 just databricks-delta-run
 just databricks-delta-smoke <warehouse_id>
