@@ -40,7 +40,7 @@ if [[ -n "$deploy_key" ]]; then
   if [[ "$scope_exists" == false ]]; then
     databricks secrets create-scope "$scope" -p "$profile" >/dev/null
   fi
-  databricks secrets put-secret "$scope" "$key" -p "$profile" --string-value "$deploy_key" >/dev/null
+  printf '%s' "$deploy_key" | databricks secrets put-secret "$scope" "$key" -p "$profile" >/dev/null
   echo "synced Databricks secret $scope/$key"
   exit 0
 fi
