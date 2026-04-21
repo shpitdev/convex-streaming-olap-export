@@ -144,6 +144,7 @@ Runtime split:
 
 Packaged entrypoints:
 
+- `just databricks-delta-sync-secret`
 - `just databricks-delta-deploy`
 - `just databricks-delta-run`
 - `just databricks-delta-smoke <warehouse_id>`

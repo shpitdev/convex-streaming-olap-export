@@ -14,7 +14,9 @@ It mirrors the current Rust source/checkpoint behavior:
 ## Required environment
 
 - `CONVEX_DEPLOYMENT_URL`
-- `CONVEX_DEPLOY_KEY`
+- one of:
+  - `CONVEX_DEPLOY_KEY`
+  - `CONVEX_DEPLOY_KEY_SECRET_SCOPE` and `CONVEX_DEPLOY_KEY_SECRET_KEY`
 
 ## Optional environment
 
@@ -25,5 +27,6 @@ It mirrors the current Rust source/checkpoint behavior:
 - `DATABRICKS_BRONZE_SCHEMA`: defaults to `bronze`
 - `DATABRICKS_CHECKPOINT_TABLE`: defaults to `connector_checkpoint`
 
-In the bundled Databricks Delta path, these are usually passed as task
-parameters rather than exported manually.
+In the bundled Databricks Delta path, the job receives the secret scope/key
+names as task parameters and resolves the actual deploy key with
+`dbutils.secrets.get(...)` at runtime.

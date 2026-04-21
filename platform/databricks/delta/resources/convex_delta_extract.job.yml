@@ -11,8 +11,10 @@ resources:
             parameters:
               - --deployment-url
               - ${var.convex_deployment_url}
-              - --deploy-key
-              - ${var.convex_deploy_key}
+              - --deploy-key-secret-scope
+              - ${var.convex_deploy_key_secret_scope}
+              - --deploy-key-secret-key
+              - ${var.convex_deploy_key_secret_key}
               - --source-id
               - ${var.source_id}
               - --table-name

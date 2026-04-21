@@ -8,8 +8,10 @@ include:
 variables:
   convex_deployment_url:
     description: Convex deployment root URL.
-  convex_deploy_key:
-    description: Convex deploy key used by the extractor.
+  convex_deploy_key_secret_scope:
+    description: Databricks secret scope that stores the Convex deploy key.
+  convex_deploy_key_secret_key:
+    description: Secret key name inside the Databricks secret scope.
   source_id:
     description: Source identifier stored in the checkpoint table.
   table_name:
@@ -30,6 +32,8 @@ targets:
     workspace:
       profile: DEFAULT
     variables:
+      convex_deploy_key_secret_scope: convex-streaming-olap-export
+      convex_deploy_key_secret_key: convex-deploy-key
       source_id: convex-streaming-olap-export-dev
       table_name: ""
       catalog: workspace
@@ -41,6 +45,8 @@ targets:
     workspace:
       profile: DEFAULT
     variables:
+      convex_deploy_key_secret_scope: convex-streaming-olap-export
+      convex_deploy_key_secret_key: convex-deploy-key
       source_id: convex-streaming-olap-export
       table_name: ""
       catalog: workspace
