@@ -10,34 +10,7 @@
       "release-type": "simple",
       "package-name": "convex-sync-kit",
       "changelog-path": "CHANGELOG.md",
-      "include-component-in-tag": false,
-      "extra-files": [
-        {
-          "type": "toml",
-          "path": "Cargo.toml",
-          "jsonpath": "$.workspace.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "apps/convex-sync/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "apps/convex-inspect/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "crates/convex-sync-core/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "crates/convex-export-s3/Cargo.toml",
-          "jsonpath": "$.package.version"
-        }
-      ]
+      "include-component-in-tag": false
     }
   }
 }
