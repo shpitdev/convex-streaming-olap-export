@@ -8,7 +8,7 @@
 Convex CDC sync engine with two supported target families:
 
 - `S3/export`: append-only raw parquet -> current-state staging parquet -> S3 publish
-- `Databricks/native`: bronze Delta CDC landing -> Lakeflow `AUTO CDC` -> silver current-state Delta tables
+- `Databricks Delta`: bronze Delta CDC landing -> Lakeflow `AUTO CDC` -> silver current-state Delta tables
 
 The source-side behavior intentionally stays close to the public Convex/Fivetran
 extraction model:
@@ -29,7 +29,7 @@ flowchart TD
   S3[crates/convex-export-s3]
   AWS[platform/aws]
   DBS3[platform/databricks/s3]
-  DBN[platform/databricks/native]
+  DBN[platform/databricks/delta]
   Root --> Inspect
   Root --> CLI
   Root --> Core
@@ -48,7 +48,7 @@ Read the repo by layer:
 - [`platform/aws/README.md`](platform/aws/README.md): AWS assets for publishing and downstream readers
 - [`platform/databricks/README.md`](platform/databricks/README.md): Databricks target family overview
 - [`platform/databricks/s3/README.md`](platform/databricks/s3/README.md): Databricks consuming the S3 export path
-- [`platform/databricks/native/README.md`](platform/databricks/native/README.md): Databricks-native bronze/silver landing
+- [`platform/databricks/delta/README.md`](platform/databricks/delta/README.md): Databricks Delta bronze/silver landing
 
 ## Install
 
@@ -85,7 +85,7 @@ flowchart LR
   C[Convex]
   E[shared sync semantics]
   S3[S3 export path]
-  DBN[Databricks native path]
+  DBN[Databricks Delta path]
   DBS3[Databricks over S3 path]
   C --> E
   E --> S3
@@ -126,19 +126,27 @@ Or via `just`:
 - `just publish-s3 --bucket your-bucket`
 - `just run --bucket your-bucket`
 
-### `Databricks/native`
+### `Databricks Delta`
 
-Checked-in Databricks-native assets:
+Checked-in Databricks Delta assets:
 
-- `platform/databricks/native/extractor/convex_cdc_job.py`
-- `platform/databricks/native/sql/bootstrap/`
-- `platform/databricks/native/lakeflow/bronze_to_silver_template.sql`
+- `platform/databricks/delta/databricks.yml`
+- `platform/databricks/delta/resources/convex_delta_extract.job.yml`
+- `platform/databricks/delta/extractor/convex_cdc_job.py`
+- `platform/databricks/delta/sql/bootstrap/`
+- `platform/databricks/delta/lakeflow/bronze_to_silver_template.sql`
 
 Runtime split:
 
 1. a Databricks job runs the extractor and appends bronze CDC rows
 2. checkpoint rows land in the control schema
 3. Lakeflow `AUTO CDC` materializes silver current-state tables
+
+Packaged entrypoints:
+
+- `just databricks-delta-deploy`
+- `just databricks-delta-run`
+- `just databricks-delta-smoke <warehouse_id>`
 
 ### `Databricks over S3`
 

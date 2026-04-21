@@ -1,0 +1,34 @@
+resources:
+  jobs:
+    convex_delta_extract:
+      name: convex-delta-extract
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: convex_delta_extract
+          spark_python_task:
+            python_file: ${workspace.file_path}/extractor/convex_cdc_job.py
+            source: WORKSPACE
+            parameters:
+              - --deployment-url
+              - ${var.convex_deployment_url}
+              - --deploy-key
+              - ${var.convex_deploy_key}
+              - --source-id
+              - ${var.source_id}
+              - --table-name
+              - ${var.table_name}
+              - --catalog
+              - ${var.catalog}
+              - --control-schema
+              - ${var.control_schema}
+              - --bronze-schema
+              - ${var.bronze_schema}
+              - --checkpoint-table
+              - ${var.checkpoint_table}
+          environment_key: default
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - requests

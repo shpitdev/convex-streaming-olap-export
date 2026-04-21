@@ -1,0 +1,49 @@
+bundle:
+  name: convex-streaming-olap-export-delta
+  uuid: 2d5d8d8e-cdb2-41e4-bc7e-7ffae07f628d
+
+include:
+  - resources/*.yml
+
+variables:
+  convex_deployment_url:
+    description: Convex deployment root URL.
+  convex_deploy_key:
+    description: Convex deploy key used by the extractor.
+  source_id:
+    description: Source identifier stored in the checkpoint table.
+  table_name:
+    description: Optional table filter for smoke/debug runs.
+  catalog:
+    description: Unity Catalog catalog that owns control and bronze tables.
+  control_schema:
+    description: Schema that owns the checkpoint table.
+  bronze_schema:
+    description: Schema that owns bronze CDC tables.
+  checkpoint_table:
+    description: Checkpoint table name.
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      profile: DEFAULT
+    variables:
+      source_id: convex-streaming-olap-export-dev
+      table_name: ""
+      catalog: workspace
+      control_schema: convex_streaming_olap_export_control
+      bronze_schema: convex_streaming_olap_export_bronze
+      checkpoint_table: connector_checkpoint
+  prod:
+    mode: production
+    workspace:
+      profile: DEFAULT
+    variables:
+      source_id: convex-streaming-olap-export
+      table_name: ""
+      catalog: workspace
+      control_schema: convex_streaming_olap_export_control
+      bronze_schema: convex_streaming_olap_export_bronze
+      checkpoint_table: connector_checkpoint

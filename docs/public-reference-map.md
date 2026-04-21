@@ -119,4 +119,4 @@ Today we intentionally differ from the Fivetran connector in these ways:
 - we support target-owned landing contracts instead of one destination runtime
 - the S3/export path writes Parquet datasets instead of pushing rows into a Fivetran destination
 - the S3/export path materializes local `staging` tables instead of relying on warehouse-native managed tables
-- the Databricks-native path lands bronze CDC rows directly and relies on Lakeflow `AUTO CDC` for current-state resolution
+- the Databricks Delta path lands bronze CDC rows directly and relies on Lakeflow `AUTO CDC` for current-state resolution
