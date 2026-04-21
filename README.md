@@ -4,13 +4,32 @@ Recurring Convex export pipelines for local analytics, Databricks, and downstrea
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shpitdev/convex-sync-kit)
 [![Release](https://img.shields.io/github/v/release/shpitdev/convex-sync-kit?display_name=tag)](https://github.com/shpitdev/convex-sync-kit/releases)
-[![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/github/license/shpitdev/convex-sync-kit)](LICENSE)
 
 ![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
 ![Convex](https://img.shields.io/badge/Convex-EE342F?logo=convex&logoColor=white)
 ![Amazon S3](https://img.shields.io/badge/Amazon%20S3-569A31?logo=amazons3&logoColor=white)
 ![Databricks](https://img.shields.io/badge/Databricks-FF3621?logo=databricks&logoColor=white)
 ![Palantir Foundry](https://img.shields.io/badge/Palantir%20Foundry-virtual%20tables-101828)
+
+## Required Inputs
+
+These are the minimum inputs almost everyone needs before a recurring sync will work:
+
+```bash
+export CONVEX_DEPLOYMENT_URL=https://your-deployment.convex.cloud
+export CONVEX_DEPLOY_KEY=your-convex-deploy-key
+```
+
+Target-specific requirements:
+
+| Target | Also required |
+|---|---|
+| Local recurring analysis | writable output paths |
+| S3/export | AWS credentials, `--bucket`, optional `--prefix` |
+| Databricks Delta | Databricks profile plus a SQL warehouse ID for bootstrap |
+| Databricks over S3 | Databricks profile, SQL warehouse ID, and Unity Catalog external-location coverage |
+| Palantir Foundry | either Databricks/Unity Catalog or an S3 path to connect Foundry to |
 
 ## Choose Your Path
 
@@ -33,6 +52,8 @@ flowchart TD
 ### 1. One-off manual export
 
 If you only need a one-time export or ad hoc backfill, use the official Convex tooling directly. This repo is aimed at recurring pipelines, not the simplest possible one-shot export.
+
+See:
 
 - [Convex streaming import/export](https://docs.convex.dev/production/integrations/streaming-import-export)
 - [Convex streaming export API](https://docs.convex.dev/streaming-export-api)
@@ -68,21 +89,29 @@ There are two supported Databricks paths:
 Recommended Databricks Delta flow:
 
 ```bash
-export CONVEX_SYNC_SOURCE=meshix-api
+export CONVEX_SYNC_SOURCE=<source-slug>
 
-just databricks-delta-bootstrap 63d28889f3eb3c4b
+just databricks-delta-bootstrap <warehouse-id>
 just databricks-delta-sync-secret DEFAULT
 just databricks-delta-deploy DEFAULT prod
 just databricks-delta-run DEFAULT prod
 ```
 
+The Delta path creates and updates:
+
+- `convex_sync_kit_<source>_delta_control`
+- `convex_sync_kit_<source>_delta_bronze`
+- `convex_sync_kit_<source>_delta_silver`
+
+The silver schema is expected to stay empty until you stand up a Lakeflow `AUTO CDC` pipeline for the tables you actually want to materialize there.
+
 Reference Databricks over S3 flow:
 
 ```bash
-export CONVEX_SYNC_SOURCE=meshix-api
+export CONVEX_SYNC_SOURCE=<source-slug>
 
-just run --bucket your-bucket --prefix prod
-just databricks-sync-staging-views --warehouse-id 63d28889f3eb3c4b --bucket your-bucket --prefix prod
+just run --bucket <bucket> --prefix prod
+just databricks-sync-staging-views --warehouse-id <warehouse-id> --bucket <bucket> --prefix prod
 ```
 
 ### 4. Using Palantir Foundry
@@ -118,7 +147,7 @@ Relevant Foundry docs:
 | Databricks over S3 | Unity Catalog views over published parquet snapshots | `convex_sync_kit_<source>_s3` |
 | Databricks Delta | checkpoint table, bronze CDC tables, silver current-state tables | `convex_sync_kit_<source>_delta_{control,bronze,silver}` |
 
-The current checked-in source profile is [`sources/meshix-api/env.sh`](sources/meshix-api/env.sh). That is only one source profile, not a repo identity. Add more source directories as you onboard more Convex projects.
+The checked-in [`sources/meshix-api/env.sh`](sources/meshix-api/env.sh) file is only an example source profile, not a repo identity. Add more source directories as you onboard more Convex projects.
 
 ## Output Paths And Defaults
 
@@ -191,4 +220,4 @@ There is a more detailed capture list in [docs/demo-storyboard.md](docs/demo-sto
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE)

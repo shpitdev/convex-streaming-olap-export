@@ -22,6 +22,6 @@ Recommended contents:
 - `DATABRICKS_DELTA_SILVER_SCHEMA`
 - `DATABRICKS_DELTA_CHECKPOINT_TABLE`
 
-Scripts load `sources/${CONVEX_SYNC_SOURCE:-meshix-api}/env.sh` automatically.
-Explicit environment variables still win because the source files only set
-defaults.
+Scripts load `sources/$CONVEX_SYNC_SOURCE/env.sh` automatically when
+`CONVEX_SYNC_SOURCE` is set. Explicit environment variables still win because
+the source files only set defaults.
