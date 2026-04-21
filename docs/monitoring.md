@@ -26,10 +26,18 @@ The first dashboard focuses on:
 - recent checkpoint history
 - bronze and silver table inventory
 
-## Why Silver Is Empty
+## AUTO CDC Status
 
-Silver is still expected to be empty until a real Lakeflow `AUTO CDC` pipeline
-is deployed.
+The current example source now has a real generated Lakeflow `AUTO CDC`
+pipeline. Deploy and run it with:
+
+```bash
+just databricks-delta-deploy-pipeline DEFAULT prod
+just databricks-delta-run-pipeline DEFAULT prod
+```
+
+For a newly onboarded source, silver will stay empty until you run that same
+deploy/run sequence for that source.
 
 What exists today:
 
@@ -37,15 +45,9 @@ What exists today:
 - bronze CDC landing
 - Delta extractor job
 - Lakeflow SQL template for per-table `AUTO CDC`
+- generated per-source pipeline scripts
 
 What is still missing:
 
-- a source-aware pipeline generation and deploy path that turns the bronze
-  tables for a specific source into a real deployed Lakeflow pipeline
-
-The generic blocker is not Lakeflow itself. It is the missing code path that:
-
-1. enumerates the bronze tables for one source
-2. decides the silver target names consistently
-3. renders the per-table `AUTO CDC` SQL
-4. deploys or updates the pipeline repeatably
+- only the deploy/run step for any additional source you onboard beyond the
+  current example profile

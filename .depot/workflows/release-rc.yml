@@ -82,7 +82,7 @@ jobs:
           archive="convex-sync_${tag_name}_linux_amd64"
           stage="dist/${archive}"
           mkdir -p "${stage}"
-          CONVEX_SYNC_VERSION="${version}" depot cargo build --locked --release -p convex-sync
+          CONVEX_SYNC_VERSION="${version}" depot cargo build --release -p convex-sync
           cp target/release/convex-sync "${stage}/convex-sync"
           cp LICENSE NOTICE README.md "${stage}/"
           tar -czf "dist/${archive}.tar.gz" -C dist "${archive}"

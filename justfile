@@ -87,6 +87,15 @@ databricks-delta-render-dashboard output_file:
 databricks-delta-publish-dashboard profile warehouse_id dashboard_id="":
   ./scripts/publish-databricks-delta-dashboard.sh {{profile}} {{warehouse_id}} {{dashboard_id}}
 
+databricks-delta-render-pipeline profile output_file:
+  ./scripts/render-databricks-delta-pipeline.sh {{profile}} {{output_file}}
+
+databricks-delta-deploy-pipeline profile="DEFAULT" target="prod":
+  ./scripts/deploy-databricks-delta-pipeline.sh {{profile}} {{target}}
+
+databricks-delta-run-pipeline profile="DEFAULT" target="prod":
+  ./scripts/run-databricks-delta-pipeline.sh {{profile}} {{target}}
+
 databricks-delta-deploy profile="DEFAULT" target="dev":
   ./scripts/deploy-databricks-delta.sh {{profile}} {{target}}
 
