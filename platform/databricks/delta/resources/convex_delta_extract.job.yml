@@ -3,6 +3,10 @@ resources:
     convex_delta_extract:
       name: ${var.job_name}
       max_concurrent_runs: 1
+      schedule:
+        quartz_cron_expression: "0 */5 * * * ?"
+        timezone_id: UTC
+        pause_status: UNPAUSED
       tasks:
         - task_key: convex_delta_extract
           spark_python_task:

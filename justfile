@@ -81,8 +81,8 @@ databricks-delta-sync-secret *args:
 databricks-delta-bootstrap warehouse_id profile="DEFAULT":
   ./scripts/bootstrap-databricks-delta.sh {{profile}} {{warehouse_id}}
 
-databricks-delta-render-dashboard output_file:
-  ./scripts/render-databricks-delta-dashboard.sh {{output_file}}
+databricks-delta-render-dashboard output_file profile="":
+  ./scripts/render-databricks-delta-dashboard.sh {{output_file}} {{profile}}
 
 databricks-delta-publish-dashboard profile warehouse_id dashboard_id="":
   ./scripts/publish-databricks-delta-dashboard.sh {{profile}} {{warehouse_id}} {{dashboard_id}}

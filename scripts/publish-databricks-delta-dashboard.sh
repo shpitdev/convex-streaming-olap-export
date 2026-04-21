@@ -24,7 +24,7 @@ render_dir="$(mktemp -d)"
 trap 'rm -rf "$render_dir"' EXIT
 rendered_dashboard="$render_dir/convex_sync_overview.lvdash.json"
 
-"$repo_root/scripts/render-databricks-delta-dashboard.sh" "$rendered_dashboard" >/dev/null
+"$repo_root/scripts/render-databricks-delta-dashboard.sh" "$rendered_dashboard" "$profile" >/dev/null
 
 payload="$render_dir/payload.json"
 python - "$rendered_dashboard" "$display_name" "$warehouse_id" "$payload" <<'PY'

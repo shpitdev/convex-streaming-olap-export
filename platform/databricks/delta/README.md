@@ -40,7 +40,7 @@ Bundle lifecycle:
 
 - `scripts/ensure-databricks-delta-secret.sh <profile> [scope] [key]`
 - `scripts/bootstrap-databricks-delta.sh <profile> <warehouse_id>`
-- `scripts/render-databricks-delta-dashboard.sh <output_file>`
+- `scripts/render-databricks-delta-dashboard.sh <output_file> [profile]`
 - `scripts/publish-databricks-delta-dashboard.sh <profile> <warehouse_id> [dashboard_id]`
 - `scripts/render-databricks-delta-pipeline.sh <profile> <output_file>`
 - `scripts/deploy-databricks-delta-pipeline.sh <profile> <target>`
@@ -118,3 +118,10 @@ just databricks-delta-deploy
 just databricks-delta-run
 just databricks-delta-smoke <warehouse_id>
 ```
+
+Auto-update behavior after deployment:
+
+- the extractor job is scheduled every 5 minutes
+- the Lakeflow pipeline is continuous once you start it with the first `run`
+- if you want a hands-free demo, add a simple heartbeat write in the source
+  Convex app so fresh upstream changes keep landing automatically

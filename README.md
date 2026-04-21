@@ -207,14 +207,27 @@ just databricks-delta-publish-dashboard DEFAULT <warehouse-id>
 
 The first version focuses on:
 
-- latest checkpoint freshness
+- checkpoint freshness and write volume
 - bronze table count
 - silver table count
 - recent checkpoint history
-- bronze and silver table inventory
+- per-table bronze vs silver record counts
+- a side-by-side bronze/silver table map
 
-Silver remaining empty is expected until you deploy a real Lakeflow `AUTO CDC`
-pipeline that reads bronze and materializes silver.
+The dashboard now filters out internal Lakeflow objects from the bronze/silver
+counts and uses full-width tables for recent checkpoints, per-table record
+counts, and the bronze/silver map.
+
+To make the pipeline feel truly live:
+
+- the extractor job now deploys with a 5-minute Databricks schedule
+- the Lakeflow pipeline is configured as continuous after its first run
+- after `just databricks-delta-deploy-pipeline DEFAULT prod`, run `just databricks-delta-run-pipeline DEFAULT prod` once to start the continuous update loop
+
+If you want a self-animating demo, add a tiny heartbeat write in the source
+Convex app on a 1-minute cron. That creates a steady stream of real upstream
+changes that show up in checkpoints, bronze, and silver without any manual
+reruns.
 
 ## Suggested Screenshots
 
